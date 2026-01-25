@@ -1,4 +1,4 @@
-# NeuroCynx - Secure Consultation Platform
+# NeuroCyn - Secure Consultation Platform
 
 NeuroCynx is a modern, secure, and user-friendly platform designed to facilitate private consultations. Built with performance and privacy in mind, it provides a seamless experience for users seeking professional advice.
 
