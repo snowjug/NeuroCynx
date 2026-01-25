@@ -360,7 +360,10 @@ const UploadSection = () => {
                     });
                     
                     result = await response.json();
-                    if (response.ok) break; // Success!
+                    if (response.ok) {
+                        console.log(`Success with model: ${model}`);
+                        break; // Success!
+                    }
                     errorMsg = result.error?.message;
                 } catch (e) {
                     errorMsg = e.message;
