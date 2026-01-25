@@ -258,7 +258,7 @@ const UploadSection = () => {
     const [analysis, setAnalysis] = useState(null);
     const fileInputRef = useRef(null);
 
-    const API_KEY = "AIzaSyANU7OmN3iozwoL32NvRpF0nzs9DsbZ6s4"; 
+    const API_KEY = "AIzaSyDFQG166x0q3wGQt6aDI4gTHZVR2eehobY"; 
 
     const handleDrag = (e) => {
         e.preventDefault();
@@ -334,8 +334,8 @@ const UploadSection = () => {
                 Ensure 'graph' has 4 metrics with scores 0-100. Return ONLY the JSON object. No markdown.
             `;
 
-            // Fallback model list
-            const models = ['gemini-3-flash-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'];
+            // Fallback model list - User specified model
+            const models = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
             let response, result, errorMsg;
 
             for (const model of models) {
@@ -400,6 +400,15 @@ const UploadSection = () => {
         }
     };
 
+    useEffect(() => {
+        if (analysis) {
+            setTimeout(() => {
+                const results = document.querySelector('.analysis-results');
+                if (results) results.classList.add('visible');
+            }, 100);
+        }
+    }, [analysis]);
+
     const renderList = (items) => {
         if (!items) return null;
         return items.map((item, i) => <li key={i}>{item}</li>);
@@ -422,11 +431,11 @@ const UploadSection = () => {
                         <div className="input-grid">
                             <div className="input-group">
                                 <label>Full Name</label>
-                                <input type="text" placeholder="John Doe" required />
+                                <input type="text" placeholder="John Doe" />
                             </div>
                             <div className="input-group">
                                 <label>Email Address</label>
-                                <input type="email" placeholder="john@example.com" required />
+                                <input type="email" placeholder="john@example.com" />
                             </div>
                         </div>
                         <div 
@@ -624,6 +633,65 @@ const HealthTips = () => {
     );
 };
 
+const ComplianceSection = () => {
+    return (
+        <section className="compliance-section">
+            <div className="container">
+                <div className="compliance-wrapper fade-up">
+                    <div className="compliance-headers">
+                        <h2>Enterprise-Grade Security & Standards</h2>
+                        <p>We adhere to the strictest global standards to protect your sensitive medical data.</p>
+                    </div>
+                    <div className="badges-grid">
+                        <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="shield-checkmark-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>ISO 27001</span>
+                                <small>Information Security</small>
+                            </div>
+                        </div>
+                        <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="lock-closed-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>HIPAA</span>
+                                <small>Compliant Processing</small>
+                            </div>
+                        </div>
+                         <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="globe-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>GDPR</span>
+                                <small>Data Protection</small>
+                            </div>
+                        </div>
+                        <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="server-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>SOC 2 Type II</span>
+                                <small>Audited Security</small>
+                            </div>
+                        </div>
+                        <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="medkit-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>HL7 FHIR</span>
+                                <small>Interoperability</small>
+                            </div>
+                        </div>
+                         <div className="badge-item">
+                            <div className="badge-icon"><ion-icon name="key-outline"></ion-icon></div>
+                            <div className="badge-content">
+                                <span>AES-256</span>
+                                <small>E2E Encryption</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+};
+
 const Footer = () => (
     <footer>
         <div className="container footer-content">
@@ -668,6 +736,7 @@ const App = () => {
             <Features />
             <ProcessWorkflow />
             <UploadSection />
+            <ComplianceSection />
             <Footer />
         </React.Fragment>
     );
