@@ -334,33 +334,41 @@ const UploadSection = () => {
                 Ensure 'graph' has 4 metrics with scores 0-100. Return ONLY the JSON object. No markdown.
             `;
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    "contents": [{
-                        "parts": [
-                            { "text": prompt },
-                            {
-                                "inline_data": {
-                                    "mime_type": mimeType,
-                                    "data": base64Data
-                                }
-                            }
-                        ]
-                    }],
-                    "generationConfig": {
-                        "response_mime_type": "application/json"
-                    }
-                })
-            });
+            // Fallback model list
+            const models = ['gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'];
+            let response, result, errorMsg;
 
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error?.message || `API Error: ${response.status} ${response.statusText}`);
+            for (const model of models) {
+                try {
+                    response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            "contents": [{
+                                "parts": [
+                                    { "text": prompt },
+                                    {
+                                        "inline_data": {
+                                            "mime_type": mimeType,
+                                            "data": base64Data
+                                        }
+                                    }
+                                ]
+                            }],
+                            "generationConfig": { "response_mime_type": "application/json" }
+                        })
+                    });
+                    
+                    result = await response.json();
+                    if (response.ok) break; // Success!
+                    errorMsg = result.error?.message;
+                } catch (e) {
+                    errorMsg = e.message;
+                }
+            }
+            
+            if (!response?.ok) {
+                 throw new Error(errorMsg || `All models failed.`);
             }
             
             let textResponse = result.candidates[0].content.parts[0].text;
