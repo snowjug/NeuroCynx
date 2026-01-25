@@ -2,8 +2,7 @@
 
 NeuroCynx is a modern, secure, and user-friendly platform designed to facilitate private consultations. Built with performance and privacy in mind, it provides a seamless experience for users seeking professional advice.
 
-![NeuroCynx Hero Image](https://placehold.co/1200x600?text=NeuroCynx+Preview) 
-*(Note: Replace with actual screenshot)*
+![NeuroCynx Hero Image](screenshot.png)
 
 ## 🚀 Features
 
