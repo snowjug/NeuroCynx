@@ -335,7 +335,7 @@ const UploadSection = () => {
             `;
 
             // Fallback model list
-            const models = ['gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'];
+            const models = ['gemini-3-flash-preview', 'gemini-2.0-flash-exp', 'gemini-1.5-flash-latest', 'gemini-1.5-flash'];
             let response, result, errorMsg;
 
             for (const model of models) {
