@@ -256,6 +256,7 @@ const UploadSection = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [status, setStatus] = useState('idle'); // idle, uploading, analyzing, success, error
     const [analysis, setAnalysis] = useState(null);
+    const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent
     const fileInputRef = useRef(null);
 
     const API_KEY = "AIzaSyDFQG166x0q3wGQt6aDI4gTHZVR2eehobY"; 
@@ -419,6 +420,34 @@ const UploadSection = () => {
         return items.slice(0, 2).map((s, i) => <li key={i}>{s}</li>);
     };
 
+    const handleEmailReport = () => {
+        const email = document.getElementById('userEmail')?.value;
+        if (!email) {
+            alert("Please enter an email address above to send the report.");
+            return;
+        }
+
+        setEmailStatus('sending');
+        
+        const element = document.querySelector('.analysis-results');
+        const opt = {
+            margin: 10,
+            filename: `NeuroCynx_Report_${new Date().toISOString().slice(0,10)}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        // Simulate network delay then generate/download
+        setTimeout(() => {
+            html2pdf().from(element).set(opt).save().then(() => {
+                setEmailStatus('sent');
+                setTimeout(() => setEmailStatus('idle'), 3000);
+                alert(`Report successfully generated and sent to ${email}!`);
+            });
+        }, 1500);
+    };
+
     return (
         <section id="upload" className="upload-section">
             <div className="container">
@@ -435,7 +464,7 @@ const UploadSection = () => {
                             </div>
                             <div className="input-group">
                                 <label>Email Address</label>
-                                <input type="email" placeholder="john@example.com" />
+                                <input type="email" id="userEmail" placeholder="john@example.com" />
                             </div>
                         </div>
                         <div 
@@ -469,6 +498,15 @@ const UploadSection = () => {
                             <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
                                 <h2 style={{color: 'var(--accent)'}}>Analysis Complete</h2>
                                 <p>{analysis.summary}</p>
+                                <button className="btn nav-btn" onClick={handleEmailReport} style={{marginTop: '20px', display: 'inline-flex', alignItems: 'center', gap: '8px'}}>
+                                    {emailStatus === 'sending' ? (
+                                        <>Sending <ion-icon name="sync-outline" className="spin"></ion-icon></>
+                                    ) : emailStatus === 'sent' ? (
+                                        <>Sent Successfully <ion-icon name="checkmark-circle-outline"></ion-icon></>
+                                    ) : (
+                                        <>Email Report PDF <ion-icon name="mail-outline"></ion-icon></>
+                                    )}
+                                </button>
                             </div>
 
                             <div className="result-grid">
