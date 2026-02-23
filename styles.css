@@ -523,9 +523,13 @@ body {
     margin-bottom: 24px;
 }
 
+.drop-zone *:not(input) {
+    pointer-events: none;
+}
+
 .drop-zone:hover, .drop-zone.dragover {
     border-color: var(--accent);
-    background: rgba(0, 113, 227, 0.05); /* Keep blue tint */
+    background: rgba(124, 58, 237, 0.05); /* Updated to match accent color */
 }
 
 .upload-icon {
@@ -1022,43 +1026,127 @@ html:not([data-theme='dark']) .glass-panel {
 /* SWOT Grid */
 .swot-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 24px;
+    margin-top: 20px;
 }
 
 .swot-box {
-    background: var(--bg-page);
-    padding: 28px;
-    border-radius: 20px;
+    background: var(--bg-card);
+    padding: 24px;
+    border-radius: 16px;
     border: 1px solid var(--border);
-    transition: all 0.3s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 .swot-box:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-.swot-box.strengths { border-top: 4px solid #10b981; }
-.swot-box.weaknesses { border-top: 4px solid #f59e0b; }
-.swot-box.opportunities { border-top: 4px solid #3b82f6; }
-.swot-box.threats { border-top: 4px solid #ef4444; }
-
-.swot-box h4 {
-    margin-bottom: 12px;
-    font-size: 14px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-primary);
+.swot-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
 }
-.swot-box ul { padding-left: 16px; margin: 0; }
-.swot-box li { font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
+
+.swot-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.swot-box h4 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.swot-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.swot-box li {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    padding-left: 20px;
+    position: relative;
+}
+
+.swot-box li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+/* Specific Styles for SWOT Types */
+/* Strengths */
+.swot-box.strengths {
+    border-left: 4px solid #10b981;
+    background: linear-gradient(to right bottom, rgba(16, 185, 129, 0.05), var(--bg-card));
+}
+.swot-box.strengths .swot-icon {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+}
+.swot-box.strengths li::before { color: #10b981; }
+
+/* Weaknesses */
+.swot-box.weaknesses {
+    border-left: 4px solid #f59e0b;
+    background: linear-gradient(to right bottom, rgba(245, 158, 11, 0.05), var(--bg-card));
+}
+.swot-box.weaknesses .swot-icon {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+.swot-box.weaknesses li::before { color: #f59e0b; }
+
+/* Opportunities */
+.swot-box.opportunities {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(to right bottom, rgba(59, 130, 246, 0.05), var(--bg-card));
+}
+.swot-box.opportunities .swot-icon {
+    background: rgba(59, 130, 246, 0.15);
+    color: #2563eb;
+}
+.swot-box.opportunities li::before { color: #3b82f6; }
+
+/* Threats */
+.swot-box.threats {
+    border-left: 4px solid #ef4444;
+    background: linear-gradient(to right bottom, rgba(239, 68, 68, 0.05), var(--bg-card));
+}
+.swot-box.threats .swot-icon {
+    background: rgba(239, 68, 68, 0.15);
+    color: #dc2626;
+}
+.swot-box.threats li::before { color: #ef4444; }
 
 /* Graph */
 .graph-bar {
@@ -1274,9 +1362,227 @@ html:not([data-theme='dark']) .glass-panel {
     }
 }
 
-@media (max-width: 700px) {
-    .badges-grid {
-        grid-template-columns: 1fr;
-    }
+/* --- NEW INDUSTRY LEVEL UI/UX STYLES --- */
+
+/* Skeleton Loaders */
+.skeleton {
+    background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 8px;
+    opacity: 0.7;
+}
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+.skeleton-text { height: 16px; margin-bottom: 12px; width: 100%; }
+.skeleton-text.short { width: 60%; }
+.skeleton-title { height: 24px; margin-bottom: 16px; width: 40%; }
+.skeleton-card { height: 200px; border-radius: var(--border-radius); }
+
+/* Chatbot Interface */
+.chatbot-container {
+    margin-top: 40px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 400px;
+}
+.chat-header {
+    padding: 16px 24px;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.chat-messages {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: var(--bg-page);
+}
+.chat-msg {
+    max-width: 80%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 15px;
+    line-height: 1.5;
+    animation: fadeUp 0.3s ease forwards;
+}
+.chat-msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+.chat-msg.ai {
+    align-self: flex-start;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+}
+.chat-input-area {
+    padding: 16px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+}
+.chat-input-area input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.3s;
+}
+.chat-input-area input:focus {
+    border-color: var(--accent);
+}
+.chat-input-area button {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    transition: transform 0.2s;
+}
+.chat-input-area button:hover {
+    transform: scale(1.05);
 }
 
+/* Modal (Doctor Booking) */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s ease;
+}
+.modal-content {
+    background: var(--bg-card);
+    padding: 32px;
+    border-radius: 24px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 24px 48px rgba(0,0,0,0.2);
+    position: relative;
+    animation: slideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.modal-close {
+    position: absolute;
+    top: 20px; right: 20px;
+    background: none; border: none;
+    font-size: 24px; color: var(--text-secondary);
+    cursor: pointer;
+}
+.doctor-list {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.doctor-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+.doctor-card:hover {
+    border-color: var(--accent);
+    background: var(--drop-zone-bg);
+}
+.doctor-avatar {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold;
+}
+.doctor-info h4 { margin-bottom: 4px; }
+.doctor-info p { font-size: 13px; color: var(--text-secondary); }
+
+/* Language Selector */
+.lang-select {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+}
+[data-theme="dark"] .lang-select {
+    background: rgba(255,255,255,0.08);
+}
+.lang-select option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* Voice Button */
+.voice-btn {
+    background: rgba(124, 58, 237, 0.1);
+    color: var(--accent);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+.voice-btn:hover {
+    background: var(--accent);
+    color: white;
+}
+.voice-btn.playing {
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(124, 58, 237, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
+}
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }

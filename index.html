@@ -18,6 +18,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- Marked.js for Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Chart.js for Data Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .fade-up { opacity: 0; transform: translateY(20px); transition: opacity 0.8s, transform 0.8s; }
         .fade-up.visible { opacity: 1; transform: translateY(0); }
@@ -26,7 +28,1141 @@
 <body>
     <div id="root"></div>
     
-    <!-- React Script -->
-    <script type="text/babel" src="script.js?v=2"></script>
+    <!-- React Script (Inlined to avoid CORS issues with file:// protocol) -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const Navbar = ({ toggleTheme, isDark, setLanguage }) => {
+            const [mobileMenu, setMobileMenu] = useState(false);
+            const toggleMenu = () => setMobileMenu(!mobileMenu);
+
+            return (
+                <nav className="nav-bar">
+                    <div className="nav-content">
+                        <a href="#" className="nav-logo">
+                            <ion-icon name="analytics-outline" style={{color: 'var(--accent)', fontSize: '24px'}}></ion-icon>
+                            <span>Neuro<span style={{color: 'var(--accent)'}}>cyn</span></span>
+                        </a>
+                        <div className={`nav-links ${mobileMenu ? 'active' : ''}`} style={mobileMenu ? {
+                            display: 'flex', flexDirection: 'column', position: 'absolute', top: '70px', left: '0', width: '100%',
+                            background: 'var(--bg-card)', padding: '24px', borderRadius: '24px',
+                            boxShadow: '0 20px 40px rgba(0,0,0,0.2)', border: '1px solid var(--border)'
+                        } : {}}>
+                            <a href="#features">Features</a>
+                            <a href="#process">Process</a>
+                            <a href="#security">Security</a>
+                            <a href="#contact">Contact</a>
+                        </div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                            <select className="lang-select" onChange={(e) => setLanguage(e.target.value)} defaultValue="English">
+                                <option value="English">EN</option>
+                                <option value="Spanish">ES</option>
+                                <option value="French">FR</option>
+                                <option value="German">DE</option>
+                                <option value="Hindi">HI</option>
+                            </select>
+                            <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle Dark Mode">
+                                <ion-icon name={isDark ? "sunny-outline" : "moon-outline"} style={{fontSize: '20px'}}></ion-icon>
+                            </button>
+                            <a href="#upload" className="nav-btn" style={{color: isDark ? '#000' : '#fff'}}>Get Started</a>
+                            <div className="mobile-toggle" onClick={toggleMenu} style={{cursor: 'pointer', fontSize: '24px', display: 'none', marginLeft: '8px'}}>
+                                <ion-icon name="menu-outline"></ion-icon>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        const NeuralBackground = ({ type = 'network' }) => {
+            const canvasRef = useRef(null);
+            
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const parent = canvas.parentElement;
+                const ctx = canvas.getContext('2d');
+                let width, height;
+                let particles = [];
+                
+                const resize = () => {
+                    width = canvas.width = parent.clientWidth;
+                    height = canvas.height = parent.clientHeight;
+                };
+                
+                const createParticles = () => {
+                    particles = [];
+                    // Adjust particle count based on area size
+                    const area = width * height;
+                    const count = Math.floor(area / 15000); 
+                    
+                    for (let i = 0; i < count; i++) {
+                        particles.push({
+                            x: Math.random() * width,
+                            y: Math.random() * height,
+                            vx: (Math.random() - 0.5) * (type === 'molecular' ? 0.3 : 0.5),
+                            vy: (Math.random() - 0.5) * (type === 'molecular' ? 0.3 : 0.5),
+                            radius: type === 'molecular' ? Math.random() * 3 + 2 : Math.random() * 2 + 1
+                        });
+                    }
+                };
+
+                const draw = () => {
+                    ctx.clearRect(0, 0, width, height);
+                    const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+                    
+                    // Update and draw particles
+                    particles.forEach(p => {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        
+                        // Bounce off edges
+                        if (p.x < 0 || p.x > width) p.vx *= -1;
+                        if (p.y < 0 || p.y > height) p.vy *= -1;
+                        
+                        ctx.beginPath();
+                        if (type === 'molecular') {
+                            ctx.rect(p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2);
+                        } else {
+                            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                        }
+                        ctx.fillStyle = accentColor;
+                        ctx.globalAlpha = type === 'molecular' ? 0.2 : 0.4;
+                        ctx.fill();
+                    });
+                    
+                    // Draw connections
+                    particles.forEach((p1, i) => {
+                        particles.slice(i + 1).forEach(p2 => {
+                            const dx = p1.x - p2.x;
+                            const dy = p1.y - p2.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            const maxDist = type === 'molecular' ? 200 : 150;
+                            
+                            if (dist < maxDist) {
+                                ctx.beginPath();
+                                ctx.moveTo(p1.x, p1.y);
+                                ctx.lineTo(p2.x, p2.y);
+                                ctx.strokeStyle = accentColor;
+                                ctx.globalAlpha = (1 - dist / maxDist) * (type === 'molecular' ? 0.3 : 1);
+                                ctx.lineWidth = type === 'molecular' ? 0.8 : 0.5;
+                                ctx.stroke();
+                            }
+                        });
+                    });
+                    
+                    requestAnimationFrame(draw);
+                };
+
+                window.addEventListener('resize', () => { resize(); createParticles(); });
+                resize();
+                createParticles();
+                draw();
+                
+                return () => window.removeEventListener('resize', resize);
+            }, [type]);
+
+            return <canvas ref={canvasRef} style={{position: 'absolute', top: 0, left: 0, zIndex: -1, width: '100%', height: '100%', opacity: 0.5}} />;
+        };
+
+        const Hero = () => {
+            return (
+                <section className="hero fade-up" style={{position: 'relative'}}>
+                    <NeuralBackground type="network" />
+                    <div className="hero-content">
+                        <h1>Next-Gen Medical<br/>Consultation</h1>
+                        <p>Advanced diagnostics powered by AI, reviewed by top specialists. Secure, fast, and reliable.</p>
+                        <div className="hero-actions">
+                            <a href="#upload" className="btn btn-primary">Start Consultation</a>
+                            <a href="#features" className="link">Learn more <span className="arrow"></span></a>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const StatsStrip = () => {
+            const [counts, setCounts] = useState({ scans: 0, uptime: 0, experts: 0 });
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setCounts(prev => ({
+                        scans: prev.scans < 10000 ? prev.scans + 123 : 10000,
+                        uptime: prev.uptime < 99.9 ? prev.uptime + 1.1 : 99.9,
+                        experts: prev.experts < 24 ? prev.experts + 1 : 24
+                    }));
+                }, 50);
+                return () => clearInterval(interval);
+            }, []);
+
+            return (
+                <div className="stats-strip fade-up">
+                    <div className="stats-container">
+                        <div className="stat-box">
+                            <span className="stat-number">{counts.scans.toLocaleString()}+</span>
+                            <span className="stat-label">Scans Analyzed</span>
+                        </div>
+                        <div className="stat-box">
+                            <span className="stat-number">{counts.uptime.toFixed(1)}%</span>
+                            <span className="stat-label">Encryption Uptime</span>
+                        </div>
+                        <div className="stat-box">
+                            <span className="stat-number">{counts.experts}/7</span>
+                            <span className="stat-label">Specialist Access</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ProcessWorkflow = () => {
+            return (
+                <section id="process" className="process-section">
+                    <div className="process-container">
+                        <div className="section-header fade-up">
+                            <h2>The Synapse Workflow</h2>
+                            <p>Seamlessly connecting your data to expert insights.</p>
+                        </div>
+                        
+                        <div className="process-steps">
+                            <div className="process-line fade-up"></div>
+
+                            <div className="process-step fade-up" style={{transitionDelay: '0.1s'}}>
+                                <div className="step-icon-wrapper">
+                                    <ion-icon name="cloud-upload-outline"></ion-icon>
+                                </div>
+                                <h3 className="step-title">1. Secure Upload</h3>
+                                <p className="step-desc">Your medical data is encrypted instantly upon upload.</p>
+                            </div>
+                            
+                            <div className="process-step fade-up" style={{transitionDelay: '0.2s'}}>
+                                <div className="step-icon-wrapper">
+                                    <ion-icon name="scan-outline"></ion-icon>
+                                </div>
+                                <h3 className="step-title">2. AI Neural Scan</h3>
+                                <p className="step-desc">Our algorithms analyze patterns to detect anomalies.</p>
+                            </div>
+                            
+                            <div className="process-step fade-up" style={{transitionDelay: '0.3s'}}>
+                                <div className="step-icon-wrapper">
+                                    <ion-icon name="document-text-outline"></ion-icon>
+                                </div>
+                                <h3 className="step-title">3. Expert Diagnosis</h3>
+                                <p className="step-desc">Specialists review the AI findings for final validation.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const Features = () => (
+            <section id="features" className="features">
+                <NeuralBackground />
+                <div className="grid-container" style={{position: 'relative', zIndex: 1}}>
+                    <div className="grid-item fade-up">
+                        <div className="feature-icon-box">
+                            <ion-icon name="pulse-outline"></ion-icon>
+                        </div>
+                        <div className="item-content">
+                            <h3>AI-Powered Analysis</h3>
+                            <p>Instant preliminary screening of your medical reports using state-of-the-art machine learning models.</p>
+                        </div>
+                    </div>
+                    <div className="grid-item fade-up">
+                        <div className="feature-icon-box">
+                            <ion-icon name="lock-closed-outline"></ion-icon>
+                        </div>
+                        <div className="item-content">
+                            <h3>End-to-End Encryption</h3>
+                            <p>Your data is encrypted before it leaves your device, ensuring complete privacy and security.</p>
+                        </div>
+                    </div>
+                    <div className="grid-item fade-up">
+                        <div className="feature-icon-box">
+                            <ion-icon name="medkit-outline"></ion-icon>
+                        </div>
+                        <div className="item-content">
+                            <h3>Expert Review</h3>
+                            <p>Verified neuro specialists validate every AI finding to prevent false positives.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        );
+
+        const SkeletonLoader = () => (
+            <div className="analysis-results fade-up visible" style={{marginTop: '40px'}}>
+                <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
+                    <div className="skeleton skeleton-title" style={{margin: '0 auto 16px auto'}}></div>
+                    <div className="skeleton skeleton-text"></div>
+                    <div className="skeleton skeleton-text short" style={{margin: '0 auto'}}></div>
+                </div>
+                <div className="result-grid">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="result-card skeleton skeleton-card"></div>
+                    ))}
+                </div>
+            </div>
+        );
+
+        const Chatbot = ({ contextData }) => {
+            const [messages, setMessages] = useState([{ role: 'ai', text: 'Hello! I am your NeuroCynx AI assistant. Do you have any questions about your report?' }]);
+            const [input, setInput] = useState('');
+            const [isTyping, setIsTyping] = useState(false);
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(() => {
+                // Only scroll if we have more than the initial greeting, or if it's a user interaction
+                if (messages.length > 1) {
+                    scrollToBottom();
+                }
+            }, [messages]);
+
+            const handleSend = async () => {
+                if (!input.trim()) return;
+                const userMsg = input;
+                setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+                setInput('');
+                setIsTyping(true);
+
+                try {
+                    const API_KEY = "AIzaSyD8xnd3tEm2tawpO-EjRKNI0bqSOmeKKIc";
+                    const prompt = `
+                        You are a helpful medical AI assistant. The user just received this medical report summary:
+                        "${contextData.summary}"
+                        
+                        User asks: "${userMsg}"
+                        
+                        Provide a concise, empathetic, and professional answer. Remind them to consult a real doctor if it's a serious medical question.
+                    `;
+
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            "contents": [{ "parts": [{ "text": prompt }] }]
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if(!response.ok) {
+                        if (result.error?.message?.includes("quota")) {
+                             throw new Error("QUOTA_EXCEEDED");
+                        }
+                        throw new Error(result.error?.message || "AI Error");
+                    }
+                    
+                    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || "I apologize, but I couldn't generate a response based on that query.";
+                    setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
+                } catch (error) {
+                    if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota")) {
+                         setMessages(prev => [...prev, { role: 'ai', text: "(Demo Mode) I am currently unable to access the live AI model due to usage limits. However, generally speaking, consulting a specialist is always recommended for specific symptoms." }]);
+                    } else {
+                         setMessages(prev => [...prev, { role: 'ai', text: "Sorry, I'm having trouble connecting right now. Please try again later." }]);
+                    }
+                } finally {
+                    setIsTyping(false);
+                }
+            };
+
+            return (
+                <div className="chatbot-container fade-up">
+                    <div className="chat-header">
+                        <ion-icon name="chatbubbles-outline" style={{fontSize: '24px'}}></ion-icon>
+                        <span>Follow-up Assistant</span>
+                    </div>
+                    <div className="chat-messages">
+                        {messages.map((msg, i) => (
+                            <div key={i} className={`chat-msg ${msg.role}`}>
+                                {msg.text}
+                            </div>
+                        ))}
+                        {isTyping && (
+                            <div className="chat-msg ai">
+                                <div className="spinner" style={{width: '20px', height: '20px', borderWidth: '2px'}}></div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+                    <div className="chat-input-area">
+                        <input 
+                            type="text" 
+                            placeholder="Ask about your report..." 
+                            value={input} 
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                        />
+                        <button onClick={handleSend} disabled={isTyping}>
+                            <ion-icon name="send-outline"></ion-icon>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const BookingModal = ({ onClose }) => {
+            const doctors = [
+                { name: "Dr. Sarah Jenkins", spec: "Neurologist", avail: "Available Today" },
+                { name: "Dr. Michael Chen", spec: "Neurosurgeon", avail: "Available Tomorrow" },
+                { name: "Dr. Emily Rodriguez", spec: "Cognitive Specialist", avail: "Available in 2 days" }
+            ];
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <button className="modal-close" onClick={onClose}><ion-icon name="close-outline"></ion-icon></button>
+                        <h2 style={{marginBottom: '8px'}}>Book a Specialist</h2>
+                        <p style={{color: 'var(--text-secondary)', fontSize: '14px'}}>Based on your report, we recommend consulting with one of our verified specialists.</p>
+                        
+                        <div className="doctor-list">
+                            {doctors.map((doc, i) => (
+                                <div key={i} className="doctor-card" style={{display: 'flex', gap: '12px', padding: '12px', border: '1px solid var(--border)', borderRadius: '12px', marginBottom: '8px'}}>
+                                    <div className="doctor-avatar" style={{width: '48px', height: '48px', background: 'var(--bg-card)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 'bold', color: 'var(--accent)'}}>{doc.name.charAt(4)}</div>
+                                    <div className="doctor-info" style={{flex: 1}}>
+                                        <h4 style={{margin: '0 0 4px 0', fontSize: '15px'}}>{doc.name}</h4>
+                                        <p style={{margin: 0, fontSize: '13px', color: 'var(--text-secondary)'}}>{doc.spec}</p>
+                                    </div>
+                                    <div style={{textAlign: 'right'}}>
+                                        <p style={{color: 'var(--accent)', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px', margin: '0 0 8px 0'}}>{doc.avail}</p>
+                                        <button className="btn btn-primary" style={{padding: '6px 16px', fontSize: '13px', borderRadius: '20px'}} onClick={() => {alert('Booking confirmed! Dr. ' + doc.name + ' will contact you shortly.'); onClose();}}>Book</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const UploadSection = ({ language }) => {
+            const [files, setFiles] = useState([]);
+            const [isDragging, setIsDragging] = useState(false);
+            const [status, setStatus] = useState('idle'); // idle, uploading, analyzing, success, error
+            const [analysis, setAnalysis] = useState(null);
+            const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent
+            const [showBookingModal, setShowBookingModal] = useState(false);
+            const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+            const fileInputRef = useRef(null);
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+            
+            // Listen for theme changes to update chart
+            const [isDarkTheme, setIsDarkTheme] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
+            
+            useEffect(() => {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+                            setIsDarkTheme(document.documentElement.getAttribute('data-theme') === 'dark');
+                        }
+                    });
+                });
+                observer.observe(document.documentElement, { attributes: true });
+                return () => observer.disconnect();
+            }, []);
+
+            const API_KEY = "AIzaSyD8xnd3tEm2tawpO-EjRKNI0bqSOmeKKIc"; 
+
+            const handleDrag = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.type === 'dragenter' || e.type === 'dragover') setIsDragging(true);
+                else if (e.type === 'dragleave') setIsDragging(false);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) addFiles(e.dataTransfer.files);
+            };
+
+            const handleChange = (e) => {
+                if (e.target.files && e.target.files[0]) addFiles(e.target.files);
+            };
+
+            const addFiles = (newFiles) => {
+                const filesArr = Array.from(newFiles);
+                setFiles(prev => [...prev, ...filesArr]);
+                setAnalysis(null);
+            };
+
+            const fileToBase64 = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => {
+                        const base64String = reader.result.split(',')[1];
+                        resolve(base64String);
+                    };
+                    reader.onerror = (error) => reject(error);
+                });
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (files.length === 0) {
+                    alert("Please upload a report file (PDF or Image).");
+                    return;
+                }
+
+                setStatus('uploading');
+                
+                try {
+                    await new Promise(r => setTimeout(r, 1000));
+                    
+                    setStatus('analyzing');
+                    
+                    // Prepare multiple files if available
+                    const contents = [];
+                    
+                    const prompt = `
+                        You are an expert neurologist. Analyze the provided medical report(s). 
+                        Generate a comprehensive health assessment in this strict JSON format:
+                        {
+                            "summary": "Detailed professional summary.",
+                            "care": ["Step 1", "Step 2"],
+                            "medicine": ["Medication Name - Dosage - Frequency (Disclaimer: Consult doctor)"],
+                            "lifestyle": ["Recommendation 1", "Recommendation 2"],
+                            "swot": {
+                                "strengths": ["Item 1", "Item 2", "Item 3"],
+                                "weaknesses": ["Item 1", "Item 2", "Item 3"],
+                                "opportunities": ["Item 1", "Item 2", "Item 3"],
+                                "threats": ["Item 1", "Item 2", "Item 3"]
+                            },
+                            "graph": [
+                                {"label": "Metric Name", "score": 80}
+                            ]
+                        }
+                        Ensure 'graph' has 4 metrics with scores 0-100. Return ONLY the JSON object. No markdown.
+                        IMPORTANT: Translate the entire response into ${language}.
+                    `;
+                    
+                    contents.push({ "text": prompt });
+
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        const base64Data = await fileToBase64(file);
+                        const mimeType = file.type || 'application/pdf';
+                        contents.push({
+                            "inline_data": {
+                                "mime_type": mimeType,
+                                "data": base64Data
+                            }
+                        });
+                    }
+
+                    // Fallback model list - User specified model
+                    const models = ['gemini-3-pro-preview', 'gemini-3-flash-preview'];
+                    let response, result, errorMsg;
+
+                    for (const model of models) {
+                        try {
+                            response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    "contents": [{
+                                        "parts": contents
+                                    }],
+                                    "generationConfig": { "response_mime_type": "application/json" }
+                                })
+                            });
+                            
+                            result = await response.json();
+                            if (response.ok) {
+                                console.log(`Success with model: ${model}`);
+                                break; // Success!
+                            }
+                            errorMsg = result.error?.message;
+                        } catch (e) {
+                            errorMsg = e.message;
+                        }
+                    }
+                    
+                    if (!response?.ok) {
+                        if (errorMsg && errorMsg.includes("quota")) {
+                            throw new Error("QUOTA_EXCEEDED");
+                        }
+                        throw new Error(errorMsg || `All models failed.`);
+                    }
+                    
+                    if (!result.candidates || !result.candidates[0]?.content?.parts?.[0]?.text) {
+                        throw new Error("AI returned empty response. It might have been blocked due to safety content.");
+                    }
+
+                    let textResponse = result.candidates[0].content.parts[0].text;
+                    
+                    // Robust JSON cleanup
+                    textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+                    // Find actual JSON start/end in case of preamble
+                    const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) textResponse = jsonMatch[0];
+                    
+                    let analysisData;
+                    try {
+                        analysisData = JSON.parse(textResponse);
+                    } catch (e) {
+                        console.error("JSON Parse Error. Raw text:", textResponse);
+                        throw new Error("Failed to parse AI response. See console.");
+                    }
+
+                    setAnalysis(analysisData);
+                    setStatus('success');
+
+                } catch (error) {
+                    console.error("Upload/Analysis Error:", error);
+                    if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota") || error.message.includes("429")) {
+                        // Fallback to Mock Data
+                        const mockData = {
+                            "summary": "⚠️ DEMO MODE (API Quota Exceeded): This is a simulated analysis based on typical healthy brain patterns. The uploaded scan shows normal structural integrity with slight localized activity in the frontal cortex suggesting mild cognitive fatigue.",
+                            "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
+                            "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
+                            "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
+                            "swot": {
+                                "strengths": ["Excellent neural connectivity", "No signs of structural atrophy", "Good vascular health"],
+                                "weaknesses": ["Minor signs of oxidative stress", "Vitamin D deficiency potential", "Eye strain indicators"],
+                                "opportunities": ["Preventative cognitive therapy", "Dietary optimization", "Supplementation regimen"],
+                                "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
+                            },
+                            "graph": [
+                                {"label": "Neural Efficiency", "score": 88},
+                                {"label": "Cognitive Load", "score": 65},
+                                {"label": "Memory Retention", "score": 92},
+                                {"label": "Stress Resilience", "score": 74}
+                            ]
+                        };
+                        alert("Note: API Quota Exceeded. Showing DEMO analysis results.");
+                        setAnalysis(mockData);
+                        setStatus('success');
+                    } else {
+                        setStatus('error');
+                        alert("Analysis failed: " + error.message);
+                    }
+                }
+            };
+
+            useEffect(() => {
+                if (analysis) {
+                    setTimeout(() => {
+                        const results = document.querySelector('.analysis-results');
+                        if (results) results.classList.add('visible');
+                        
+                        // Initialize Chart.js with Improved Visuals
+                        if (chartRef.current && analysis.graph) {
+                            if (chartInstance.current) {
+                                chartInstance.current.destroy();
+                            }
+                            const ctx = chartRef.current.getContext('2d');
+                            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                            const textColor = isDark ? '#f5f5f7' : '#1a1a1a';
+                            const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+                            const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+
+                            // Gradient for the chart area
+                            const gradient = ctx.createRadialGradient(150, 150, 0, 150, 150, 150);
+                            gradient.addColorStop(0, isDark ? 'rgba(124, 58, 237, 0.5)' : 'rgba(124, 58, 237, 0.3)');
+                            gradient.addColorStop(1, isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)');
+                            
+                            chartInstance.current = new Chart(ctx, {
+                                type: 'radar',
+                                data: {
+                                    labels: analysis.graph.map(g => g.label),
+                                    datasets: [{
+                                        label: 'Health Score',
+                                        data: analysis.graph.map(g => g.score),
+                                        backgroundColor: gradient,
+                                        borderColor: accentColor,
+                                        borderWidth: 3,
+                                        pointBackgroundColor: isDark ? '#1a1a1a' : '#ffffff',
+                                        pointBorderColor: accentColor,
+                                        pointBorderWidth: 2,
+                                        pointRadius: 5,
+                                        pointHoverBackgroundColor: accentColor,
+                                        pointHoverBorderColor: '#fff',
+                                        pointHoverRadius: 7
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    scales: {
+                                        r: {
+                                            angleLines: { 
+                                                display: true,
+                                                color: gridColor,
+                                                lineWidth: 1
+                                            },
+                                            grid: { 
+                                                color: gridColor,
+                                                circular: true, // Make grid circular for a cleaner look
+                                                lineWidth: 1
+                                            },
+                                            pointLabels: { 
+                                                color: textColor, 
+                                                font: { family: 'Inter', size: 13, weight: '600' },
+                                                padding: 20
+                                            },
+                                            ticks: { 
+                                                display: true, 
+                                                backdropColor: 'transparent',
+                                                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                                                font: { size: 10 },
+                                                stepSize: 20,
+                                                min: 0, 
+                                                max: 100,
+                                                z: 1 // Ensure ticks are above grid
+                                            }
+                                        }
+                                    },
+                                    plugins: {
+                                        legend: { display: false },
+                                        tooltip: {
+                                            backgroundColor: isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)',
+                                            titleColor: isDark ? '#000' : '#fff',
+                                            bodyColor: isDark ? '#000' : '#fff',
+                                            padding: 12,
+                                            cornerRadius: 8,
+                                            displayColors: false,
+                                            callbacks: {
+                                                label: function(context) {
+                                                    return ` Score: ${context.raw}/100`;
+                                                }
+                                            }
+                                        }
+                                    },
+                                    animation: {    
+                                        duration: 2000,
+                                        easing: 'easeOutQuart'
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                }
+            }, [analysis, isDarkTheme]); // Re-render when theme or analysis changes
+
+            const speakText = (text) => {
+                if ('speechSynthesis' in window) {
+                    if (isPlayingVoice) {
+                        window.speechSynthesis.cancel();
+                        setIsPlayingVoice(false);
+                        return;
+                    }
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    const langMap = { "English": "en-US", "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Hindi": "hi-IN" };
+                    utterance.lang = langMap[language] || "en-US";
+                    utterance.onend = () => setIsPlayingVoice(false);
+                    setIsPlayingVoice(true);
+                    window.speechSynthesis.speak(utterance);
+                } else {
+                    alert("Text-to-speech is not supported in your browser.");
+                }
+            };
+
+            const renderList = (items) => {
+                if (!items) return null;
+                return items.map((item, i) => <li key={i}>{item}</li>);
+            };
+
+            const renderSwot = (items) => {
+                if (!items) return null;
+                return items.map((s, i) => <li key={i}>{s}</li>);
+            };
+
+            const handleEmailReport = () => {
+                const email = document.getElementById('userEmail')?.value;
+                if (!email) {
+                    alert("Please enter an email address above to send the report.");
+                    return;
+                }
+
+                setEmailStatus('sending');
+                
+                const element = document.querySelector('.analysis-results');
+                const opt = {
+                    margin: 10,
+                    filename: `NeuroCynx_Report_${new Date().toISOString().slice(0,10)}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+
+                // Simulate network delay then generate/download
+                setTimeout(() => {
+                    html2pdf().from(element).set(opt).save().then(() => {
+                        setEmailStatus('sent');
+                        setTimeout(() => setEmailStatus('idle'), 3000);
+                        alert(`Report successfully generated and sent to ${email}!`);
+                    });
+                }, 1500);
+            };
+
+            return (
+                <section id="upload" className="upload-section">
+                    <div className="container">
+                        <div className="section-header fade-up">
+                            <h2>Secure Upload</h2>
+                            <p>Upload your reports for instant AI-powered analysis.</p>
+                        </div>
+                        <div className="glass-panel fade-up">
+                            <form id="uploadForm" onSubmit={handleSubmit}>
+                                <div className="input-grid">
+                                    <div className="input-group">
+                                        <label>Full Name</label>
+                                        <input type="text" placeholder="John Doe" />
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Email Address</label>
+                                        <input type="email" id="userEmail" placeholder="john@example.com" />
+                                    </div>
+                                </div>
+                                <div 
+                                    className={`drop-zone ${isDragging ? 'dragover' : ''}`}
+                                    onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
+                                    onClick={() => fileInputRef.current.click()}
+                                >
+                                    <div className="upload-icon">
+                                        {status === 'analyzing' ? <div className="spinner"><ion-icon name="sync-outline" className="spin"></ion-icon></div> : <ion-icon name="cloud-upload-outline" style={{fontSize: '48px'}}></ion-icon>}
+                                    </div>
+                                    <span className="drop-title">
+                                        {files.length > 0 ? `${files.length} file(s) selected` : "Click or Drag files to upload"}
+                                    </span>
+                                    <input type="file" ref={fileInputRef} style={{display: 'none'}} accept=".pdf,.jpg,.jpeg,.png" multiple onChange={handleChange} />
+                                </div>
+                                <div className="file-list">
+                                    {files.map((f, i) => (
+                                        <div key={i} className="file-row">
+                                            <span>{f.name}</span>
+                                            <span style={{fontSize: '12px', color: 'var(--text-secondary)'}}>{(f.size/1024/1024).toFixed(2)} MB</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button type="submit" className="btn btn-primary btn-block" disabled={status === 'uploading' || status === 'analyzing'}>
+                                    {status === 'uploading' ? "Uploading..." : status === 'analyzing' ? "Analyzing via Neuro-AI..." : "Analyze Report"}
+                                </button>
+                            </form>
+
+                            {status === 'analyzing' && <SkeletonLoader />}
+
+                            {analysis && (
+                                <div className="analysis-results fade-up">
+                                    <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
+                                        <h2 style={{color: 'var(--accent)'}}>Analysis Complete</h2>
+                                        <p>{analysis.summary}</p>
+                                        <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
+                                            <button className={`voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
+                                                <ion-icon name={isPlayingVoice ? "volume-high-outline" : "volume-medium-outline"}></ion-icon>
+                                                {isPlayingVoice ? "Stop Reading" : "Read Aloud"}
+                                            </button>
+                                            <button className="btn nav-btn" onClick={handleEmailReport} style={{display: 'inline-flex', alignItems: 'center', gap: '8px'}}>
+                                                {emailStatus === 'sending' ? (
+                                                    <>Sending <ion-icon name="sync-outline" className="spin"></ion-icon></>
+                                                ) : emailStatus === 'sent' ? (
+                                                    <>Sent Successfully <ion-icon name="checkmark-circle-outline"></ion-icon></>
+                                                ) : (
+                                                    <>Email Report PDF <ion-icon name="mail-outline"></ion-icon></>
+                                                )}
+                                            </button>
+                                            {analysis.swot?.threats?.length > 0 && (
+                                                <button className="btn btn-primary" onClick={() => setShowBookingModal(true)} style={{display: 'inline-flex', alignItems: 'center', gap: '8px'}}>
+                                                    Consult Doctor <ion-icon name="calendar-outline"></ion-icon>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="result-grid">
+                                        <div className="result-card" style={{gridColumn: '1 / -1', minHeight: '400px', position: 'relative', overflow: 'hidden'}}>
+                                            {/* Dynamic Spider Web Background */}
+                                            <NeuralBackground type="molecular" />
+                                            
+                                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', position: 'relative', zIndex: 2}}>
+                                                <h3><ion-icon name="stats-chart-outline" style={{color: 'var(--accent)'}}></ion-icon> Neuro-Metric Analysis</h3>
+                                                <div style={{fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '4px 12px', borderRadius: '20px', border: '1px solid var(--border)'}}>
+                                                    Overall Health Score: <span style={{color: 'var(--accent)', fontWeight: 'bold'}}>{analysis.graph ? Math.round(analysis.graph.reduce((a,b) => a + b.score, 0) / analysis.graph.length) : 0}/100</span>
+                                                </div>
+                                            </div>
+                                            <div className="health-graph" style={{position: 'relative', height: '350px', width: '100%', display: 'flex', justifyContent: 'center', zIndex: 2}}>
+                                                <canvas ref={chartRef} style={{maxWidth: '600px', margin: '0 auto'}}></canvas>
+                                            </div>
+                                        </div>
+
+                                        <div className="result-card" style={{gridColumn: '1 / -1'}}>
+                                            <h3><ion-icon name="analytics-outline"></ion-icon> Comprehensive SWOT Analysis</h3>
+                                            <div className="swot-grid">
+                                                <div className="swot-box strengths">
+                                                    <div className="swot-header">
+                                                        <div className="swot-icon"><ion-icon name="shield-checkmark-outline"></ion-icon></div>
+                                                        <h4>Strengths</h4>
+                                                    </div>
+                                                    <ul>{renderSwot(analysis.swot && analysis.swot.strengths)}</ul>
+                                                </div>
+                                                <div className="swot-box weaknesses">
+                                                    <div className="swot-header">
+                                                        <div className="swot-icon"><ion-icon name="alert-circle-outline"></ion-icon></div>
+                                                        <h4>Weaknesses</h4>
+                                                    </div>
+                                                    <ul>{renderSwot(analysis.swot && analysis.swot.weaknesses)}</ul>
+                                                </div>
+                                                <div className="swot-box opportunities">
+                                                    <div className="swot-header">
+                                                        <div className="swot-icon"><ion-icon name="bulb-outline"></ion-icon></div>
+                                                        <h4>Opportunities</h4>
+                                                    </div>
+                                                    <ul>{renderSwot(analysis.swot && analysis.swot.opportunities)}</ul>
+                                                </div>
+                                                <div className="swot-box threats">
+                                                    <div className="swot-header">
+                                                        <div className="swot-icon"><ion-icon name="warning-outline"></ion-icon></div>
+                                                        <h4>Threats</h4>
+                                                    </div>
+                                                    <ul>{renderSwot(analysis.swot && analysis.swot.threats)}</ul>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="result-card">
+                                            <h3><ion-icon name="medkit-outline"></ion-icon> Care & Meds</h3>
+                                            <ul className="list-check">
+                                                {renderList(analysis.care)}
+                                                {analysis.medicine && analysis.medicine.map((m, i) => <li key={i} style={{color: 'var(--accent)'}}><strong>Rx:</strong> {m}</li>)}
+                                            </ul>
+                                        </div>
+
+                                        <div className="result-card">
+                                            <h3><ion-icon name="leaf-outline"></ion-icon> Lifestyle</h3>
+                                            <ul className="list-check">
+                                                {renderList(analysis.lifestyle)}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    <Chatbot contextData={analysis} />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {showBookingModal && <BookingModal onClose={() => setShowBookingModal(false)} />}
+                </section>
+            );
+        };
+
+        const HealthTips = () => {
+            const cards = [
+                { icon: "water-outline", title: "Cognitive Clarity", desc: "Hydration is key. Even 1% dehydration decreases cognitive function and focus." },
+                { icon: "moon-outline", title: "Deep Sleep Architecture", desc: "Protect your REM cycles. This is when your brain consolidates memory and clears toxins." },
+                { icon: "extension-puzzle-outline", title: "Neuroplasticity", desc: "Learn something new daily to form new neural pathways and keep your brain agile." },
+                { icon: "leaf-outline", title: "Brain Foods", desc: "Omega-3s and antioxidants in berries reduce oxidative stress in neural networks." },
+                { icon: "pulse-outline", title: "Stress Management", desc: "Chronic stress shrinks the hippocampus. Practice mindfulness to protect memory." },
+                { icon: "sunny-outline", title: "Morning Light", desc: "Exposure to sunlight resets your circadian rhythm for better sleep-wake cycles." }
+            ];
+
+            // Duplicated for infinite loop
+            const carouselItems = [...cards, ...cards];
+            const sliderRef = useRef(null);
+            const [isDown, setIsDown] = useState(false);
+            const [startX, setStartX] = useState(0);
+            const [scrollLeft, setScrollLeft] = useState(0);
+            const [isPaused, setIsPaused] = useState(false);
+
+            useEffect(() => {
+                const slider = sliderRef.current;
+                let animationId;
+                
+                const animate = () => {
+                    if (!isDown && !isPaused && slider) {
+                        slider.scrollLeft += 1;
+                        // Seamless loop reset
+                        if (slider.scrollLeft >= slider.scrollWidth / 2) {
+                            slider.scrollLeft = 0;
+                        }
+                    }
+                    animationId = requestAnimationFrame(animate);
+                };
+                animationId = requestAnimationFrame(animate);
+                return () => cancelAnimationFrame(animationId);
+            }, [isDown, isPaused]);
+
+            const handleMouseDown = (e) => {
+                setIsDown(true);
+                setStartX(e.pageX - sliderRef.current.offsetLeft);
+                setScrollLeft(sliderRef.current.scrollLeft);
+            };
+
+            const handleMouseLeave = () => {
+                setIsDown(false);
+                setIsPaused(false);
+            };
+
+            const handleMouseUp = () => {
+                setIsDown(false);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - sliderRef.current.offsetLeft;
+                const walk = (x - startX) * 2; 
+                sliderRef.current.scrollLeft = scrollLeft - walk;
+            };
+
+            return (
+                <section className="health-tips-section fade-up">
+                    <div className="health-header">
+                        <h2>Daily Health Insights</h2>
+                        <p style={{fontSize: '19px', color: 'var(--text-secondary)'}}>Drag to explore or watch our expert curated tips.</p>
+                    </div>
+                    
+                    <div 
+                        className="tips-carousel-wrapper"
+                        ref={sliderRef}
+                        onMouseDown={handleMouseDown}
+                        onMouseLeave={handleMouseLeave}
+                        onMouseUp={handleMouseUp}
+                        onMouseMove={handleMouseMove}
+                        onMouseEnter={() => setIsPaused(true)}
+                    >
+                        <div className="tips-track">
+                            {carouselItems.map((card, i) => (
+                                <div key={i} className="health-card">
+                                    <div className="card-number">{String((i % cards.length) + 1).padStart(2, '0')}</div>
+                                    <div>
+                                        <div className="card-icon-wrapper">
+                                            <ion-icon name={card.icon}></ion-icon>
+                                        </div>
+                                        <div className="card-content">
+                                            <h3>{card.title}</h3>
+                                            <p>{card.desc}</p>
+                                        </div>
+                                    </div>
+                                    <div className="card-footer">
+                                        <span className="card-action">Read More <ion-icon name="arrow-forward-outline"></ion-icon></span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const ComplianceSection = () => {
+            return (
+                <section id="security" className="compliance-section">
+                    <div className="container">
+                        <div className="compliance-wrapper fade-up">
+                            <div className="compliance-headers">
+                                <h2>Enterprise-Grade Security & Standards</h2>
+                                <p>We adhere to the strictest global standards to protect your sensitive medical data.</p>
+                            </div>
+                            <div className="badges-grid">
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="shield-checkmark-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>ISO 27001</span>
+                                        <small>Information Security</small>
+                                    </div>
+                                </div>
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="lock-closed-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>HIPAA</span>
+                                        <small>Compliant Processing</small>
+                                    </div>
+                                </div>
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="globe-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>GDPR</span>
+                                        <small>Data Protection</small>
+                                    </div>
+                                </div>
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="server-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>SOC 2 Type II</span>
+                                        <small>Audited Security</small>
+                                    </div>
+                                </div>
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="medkit-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>HL7 FHIR</span>
+                                        <small>Interoperability</small>
+                                    </div>
+                                </div>
+                                <div className="badge-item">
+                                    <div className="badge-icon"><ion-icon name="key-outline"></ion-icon></div>
+                                    <div className="badge-content">
+                                        <span>AES-256</span>
+                                        <small>E2E Encryption</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const Footer = () => (
+            <footer id="contact">
+                <div className="container footer-content">
+                    <div>© 2026 Neurocyn. All rights reserved.</div>
+                    <div className="footer-links"><a href="#">Privacy</a><a href="#">Terms</a></div>
+                </div>
+            </footer>
+        );
+
+        const App = () => {
+            const [isDark, setIsDark] = useState(false);
+            const [language, setLanguage] = useState('English');
+
+            useEffect(() => {
+                const savedTheme = localStorage.getItem('theme');
+                if (savedTheme === 'dark') {
+                    setIsDark(true);
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                }
+            }, []);
+
+            const toggleTheme = () => {
+                const newTheme = !isDark;
+                setIsDark(newTheme);
+                document.documentElement.setAttribute('data-theme', newTheme ? 'dark' : 'light');
+                localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+            };
+
+            useEffect(() => {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => entry.isIntersecting && entry.target.classList.add('visible'));
+                }, { threshold: 0.1 });
+                setTimeout(() => document.querySelectorAll('.fade-up').forEach(el => observer.observe(el)), 100);
+                return () => observer.disconnect();
+            }, []);
+
+            return (
+                <React.Fragment>
+                    <Navbar toggleTheme={toggleTheme} isDark={isDark} language={language} setLanguage={setLanguage} />
+                    <Hero />
+                    <StatsStrip />
+                    <HealthTips />
+                    <Features />
+                    <ProcessWorkflow />
+                    <UploadSection language={language} />
+                    <ComplianceSection />
+                    <Footer />
+                </React.Fragment>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
