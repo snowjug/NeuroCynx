@@ -229,6 +229,11 @@ async function generateRadarChart(graphData) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(label, labelX, labelY);
+
+      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
+      ctx.font = 'bold 14px Arial';
+      ctx.fillStyle = '#1d4ed8';
+      ctx.fillText(`${Math.round(score)}`, labelX, labelY + 18);
     }
 
     ctx.beginPath();
@@ -248,7 +253,7 @@ async function generateRadarChart(graphData) {
     ctx.stroke();
 
     for (const point of plotPoints) {
-      const { x, y, score, angle } = point;
+      const { x, y } = point;
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#7c3aed';
@@ -256,23 +261,6 @@ async function generateRadarChart(graphData) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
-
-      const scoreX = x + 16 * Math.cos(angle);
-      const scoreY = y + 16 * Math.sin(angle);
-      const scoreLabel = `${Math.round(score)}`;
-
-      ctx.beginPath();
-      ctx.fillStyle = '#111827';
-      ctx.globalAlpha = 0.9;
-      ctx.roundRect(scoreX - 14, scoreY - 10, 28, 18, 6);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      ctx.font = 'bold 11px Arial';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(scoreLabel, scoreX, scoreY);
     }
 
     return canvas.toBuffer('image/png');
@@ -331,6 +319,42 @@ async function generatePDF(patientName, analysis) {
         doc.moveDown(0.35);
       };
 
+      const drawHighlightCards = (metrics) => {
+        if (!Array.isArray(metrics) || metrics.length === 0) {
+          return;
+        }
+
+        const normalized = metrics
+          .map((m) => ({ label: String(m?.label || 'Metric'), score: Math.max(0, Math.min(100, Math.round(Number(m?.score) || 0))) }))
+          .sort((a, b) => b.score - a.score);
+
+        const average = Math.round(normalized.reduce((sum, item) => sum + item.score, 0) / normalized.length);
+        const best = normalized[0];
+        const focus = normalized.at(-1);
+
+        const cards = [
+          { title: 'Overall Score', value: `${average}/100`, note: average >= 75 ? 'Strong overall profile' : 'Needs closer follow-up', color: '#1d4ed8', bg: '#eff6ff' },
+          { title: 'Top Strength', value: `${best.label}: ${best.score}`, note: 'Best performing health dimension', color: '#059669', bg: '#ecfdf5' },
+          { title: 'Focus Area', value: `${focus.label}: ${focus.score}`, note: 'Prioritize this for improvement', color: '#d97706', bg: '#fffbeb' }
+        ];
+
+        const gap = 10;
+        const cardWidth = (contentWidth - (gap * 2)) / 3;
+        const cardHeight = 72;
+        ensureSpace(cardHeight + 10);
+        const y = doc.y;
+
+        cards.forEach((card, index) => {
+          const x = pageLeft + (index * (cardWidth + gap));
+          doc.roundedRect(x, y, cardWidth, cardHeight, 8).fill(card.bg).strokeColor('#dbe3ef').lineWidth(1).stroke();
+          doc.fillColor(card.color).font('Helvetica-Bold').fontSize(9).text(card.title, x + 10, y + 10, { width: cardWidth - 20 });
+          doc.fillColor(textPrimary).font('Helvetica-Bold').fontSize(11).text(card.value, x + 10, y + 26, { width: cardWidth - 20 });
+          doc.fillColor(textSecondary).font('Helvetica').fontSize(8).text(card.note, x + 10, y + 45, { width: cardWidth - 20 });
+        });
+
+        doc.y = y + cardHeight + 10;
+      };
+
       // Header band
       const headerTop = doc.y;
       doc.roundedRect(pageLeft, headerTop, contentWidth, 84, 10).fill('#0f172a');
@@ -352,6 +376,8 @@ async function generatePDF(patientName, analysis) {
       doc.font('Helvetica').fontSize(10).fillColor(textSecondary);
       const summary = String(analysis?.summary || '').trim();
       doc.text(summary || 'No summary available.', pageLeft, doc.y, { width: contentWidth, align: 'left' });
+      doc.moveDown(0.4);
+      drawHighlightCards(Array.isArray(analysis?.graph) ? analysis.graph : []);
       doc.moveDown(0.5);
       drawDivider();
       doc.moveDown(0.5);
@@ -402,18 +428,42 @@ async function generatePDF(patientName, analysis) {
         drawSectionTitle('SWOT Analysis');
 
         const swotSections = [
-          { title: 'Strengths', items: analysis.swot.strengths, color: '#059669' },
-          { title: 'Weaknesses', items: analysis.swot.weaknesses, color: '#d97706' },
-          { title: 'Opportunities', items: analysis.swot.opportunities, color: '#2563eb' },
-          { title: 'Threats', items: analysis.swot.threats, color: '#dc2626' }
+          { title: 'Strengths', items: analysis.swot.strengths, color: '#059669', bg: '#ecfdf5' },
+          { title: 'Weaknesses', items: analysis.swot.weaknesses, color: '#d97706', bg: '#fffbeb' },
+          { title: 'Opportunities', items: analysis.swot.opportunities, color: '#2563eb', bg: '#eff6ff' },
+          { title: 'Threats', items: analysis.swot.threats, color: '#dc2626', bg: '#fef2f2' }
         ];
 
-        swotSections.forEach((section) => {
-          ensureSpace(38);
-          doc.font('Helvetica-Bold').fontSize(11).fillColor(section.color).text(section.title, pageLeft, doc.y, { width: contentWidth });
-          doc.moveDown(0.1);
-          drawBulletList(section.items, { color: textSecondary, maxItemLength: 180 });
-        });
+        const gap = 12;
+        const cardWidth = (contentWidth - gap) / 2;
+        const cardHeight = 130;
+
+        for (let i = 0; i < swotSections.length; i += 2) {
+          ensureSpace(cardHeight + 12);
+          const rowY = doc.y;
+
+          for (let j = 0; j < 2; j++) {
+            const section = swotSections[i + j];
+            if (!section) {
+              continue;
+            }
+
+            const x = pageLeft + (j * (cardWidth + gap));
+            doc.roundedRect(x, rowY, cardWidth, cardHeight, 8).fill(section.bg).strokeColor('#dbe3ef').lineWidth(1).stroke();
+            doc.fillColor(section.color).font('Helvetica-Bold').fontSize(11).text(section.title, x + 10, rowY + 10, { width: cardWidth - 20 });
+
+            const lines = Array.isArray(section.items) && section.items.length > 0
+              ? section.items.slice(0, 3).map((item) => `• ${String(item).substring(0, 54)}`)
+              : ['• Not available'];
+
+            doc.fillColor(textSecondary).font('Helvetica').fontSize(9).text(lines.join('\n'), x + 10, rowY + 28, {
+              width: cardWidth - 20,
+              height: cardHeight - 36
+            });
+          }
+
+          doc.y = rowY + cardHeight + 10;
+        }
 
         drawDivider();
         doc.moveDown(0.6);
