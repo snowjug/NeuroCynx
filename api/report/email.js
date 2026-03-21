@@ -109,7 +109,9 @@ const sendViaResend = async ({ to, subject, html, pdfBuffer, filename }) => {
   });
 
   if (error) {
-    throw new Error(error.message || 'Resend email request failed.');
+    const errorDetail = error.message || error.toString();
+    console.error('Resend API Error:', { error: errorDetail, from, to });
+    throw new Error(`Resend failed: ${errorDetail}. Verify (1) API key is valid, (2) sender domain "${from}" is verified in Resend.`);
   }
 };
 
