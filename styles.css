@@ -1336,6 +1336,10 @@ html:not([data-theme='dark']) .glass-panel {
     .badge-item small {
         font-size: 13px;
     }
+
+    .compliance-section {
+        display: none;
+    }
 }
 
 .badge-item {
