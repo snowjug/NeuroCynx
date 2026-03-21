@@ -454,26 +454,28 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(0.5);
 
       // Chart with legend
+      const radarMetrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
+      const radarLegendRows = Math.ceil(radarMetrics.length / 2);
+      const radarSectionHeight = chartBuffer ? (28 + 220 + 20 + (radarLegendRows * 14)) : 72;
+      ensureSpace(radarSectionHeight + 8);
       drawSectionTitle('Health Radar');
       if (chartBuffer) {
-        ensureSpace(340);
         const chartWidth = 220;
         const chartX = pageLeft + (contentWidth - chartWidth) / 2;
         doc.image(chartBuffer, chartX, doc.y, { fit: [chartWidth, chartWidth], align: 'center' });
         doc.y += chartWidth + 8;
 
         // Legend below chart - compact format
-        const metrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
-        if (metrics.length > 0) {
+        if (radarMetrics.length > 0) {
           doc.moveDown(0.2);
           const legendItemsPerRow = 2;
           const legendColWidth = contentWidth / legendItemsPerRow;
           let legendIndex = 0;
           
-          for (let i = 0; i < Math.ceil(metrics.length / legendItemsPerRow); i++) {
+          for (let i = 0; i < Math.ceil(radarMetrics.length / legendItemsPerRow); i++) {
             const legendY = doc.y;
-            for (let j = 0; j < legendItemsPerRow && legendIndex < metrics.length; j++) {
-              const metric = metrics[legendIndex];
+            for (let j = 0; j < legendItemsPerRow && legendIndex < radarMetrics.length; j++) {
+              const metric = radarMetrics[legendIndex];
               const score = Math.max(0, Math.min(100, Math.round(Number(metric?.score) || 0)));
               const label = String(metric?.label || 'Metric').substring(0, 24);
               const x = pageLeft + (j * legendColWidth);
@@ -495,10 +497,10 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(0.6);
 
       // Metrics table - keep together on same page
-      drawSectionTitle('Metrics Overview');
       const metrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
       const metricsTableHeight = 34 + (metrics.length * 24);
-      ensureSpace(metricsTableHeight + 10);
+      ensureSpace(metricsTableHeight + 38);
+      drawSectionTitle('Metrics Overview');
       
       const tableTop = doc.y;
       doc.roundedRect(pageLeft, tableTop, contentWidth, 26, 6).fill('#f8fafc').strokeColor(borderColor).lineWidth(1).stroke();
@@ -522,7 +524,7 @@ async function generatePDF(patientName, analysis) {
 
       // SWOT - keep section together
       if (analysis?.swot && typeof analysis.swot === 'object') {
-        const swotHeight = 28 + (2 * 170);
+        const swotHeight = 28 + (2 * 172);
         ensureSpace(swotHeight + 10);
         drawSectionTitle('SWOT Analysis');
 
@@ -551,14 +553,26 @@ async function generatePDF(patientName, analysis) {
             doc.roundedRect(x, rowY, cardWidth, cardHeight, 8).fill(section.bg).strokeColor('#dbe3ef').lineWidth(1).stroke();
             doc.fillColor(section.color).font('Helvetica-Bold').fontSize(12).text(section.title, x + 12, rowY + 12, { width: cardWidth - 24 });
 
-            const lines = Array.isArray(section.items) && section.items.length > 0
-              ? section.items.slice(0, 4).map((item) => `• ${String(item).substring(0, 52)}`)
-              : ['• Not available'];
+            const textX = x + 12;
+            const textY = rowY + 34;
+            const textWidth = cardWidth - 24;
+            const textBottom = rowY + cardHeight - 12;
+            const items = Array.isArray(section.items) && section.items.length > 0
+              ? section.items.slice(0, 4)
+              : ['Not available'];
 
-            doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(lines.join('\n'), x + 12, rowY + 34, {
-              width: cardWidth - 24,
-              height: cardHeight - 46
-            });
+            let cursorY = textY;
+            doc.fillColor(textSecondary).font('Helvetica').fontSize(10);
+            for (const rawItem of items) {
+              const itemText = `• ${String(rawItem).substring(0, 64)}`;
+              const itemHeight = doc.heightOfString(itemText, { width: textWidth, align: 'left' });
+              if (cursorY + itemHeight > textBottom) {
+                doc.text('• ...', textX, cursorY, { width: textWidth, align: 'left' });
+                break;
+              }
+              doc.text(itemText, textX, cursorY, { width: textWidth, align: 'left' });
+              cursorY += itemHeight + 2;
+            }
           }
 
           doc.y = rowY + cardHeight + 10;
@@ -569,11 +583,11 @@ async function generatePDF(patientName, analysis) {
       }
 
       // Recommendations with professional card styling - keep sections together
-      drawSectionTitle('Care Recommendations');
       const careItems = Array.isArray(analysis?.care) ? analysis.care : [];
+      ensureSpace((careItems.length > 0 ? 115 : 40) + 30);
+      drawSectionTitle('Care Recommendations');
       
       if (careItems.length > 0) {
-        ensureSpace(115);
         const careCardY = doc.y;
         doc.roundedRect(pageLeft, careCardY, contentWidth, 105, 8).fill('#f0f9ff').strokeColor('#0284c7').lineWidth(1.5).stroke();
         doc.fillColor('#0c4a6e').font('Helvetica-Bold').fontSize(11).text('Action Items & Monitoring', pageLeft + 12, careCardY + 10, { width: contentWidth - 24 });
@@ -591,11 +605,11 @@ async function generatePDF(patientName, analysis) {
 
       doc.moveDown(0.5);
 
-      drawSectionTitle('Medication Guidance');
       const medicineItems = Array.isArray(analysis?.medicine) ? analysis.medicine : [];
+      ensureSpace((medicineItems.length > 0 ? 145 : 40) + 30);
+      drawSectionTitle('Medication Guidance');
       
       if (medicineItems.length > 0) {
-        ensureSpace(145);
         const medicineCardY = doc.y;
         doc.roundedRect(pageLeft, medicineCardY, contentWidth, 135, 8).fill('#fefce8').strokeColor('#ca8a04').lineWidth(1.5).stroke();
         doc.fillColor('#78350f').font('Helvetica-Bold').fontSize(11).text('Prescribed Medications', pageLeft + 12, medicineCardY + 10, { width: contentWidth - 24 });
@@ -615,10 +629,10 @@ async function generatePDF(patientName, analysis) {
 
       doc.moveDown(0.5);
 
-      drawSectionTitle('Lifestyle Recommendations');
       const lifestyleItems = Array.isArray(analysis?.lifestyle) ? analysis.lifestyle : [];
+      ensureSpace((lifestyleItems.length > 0 ? 140 : 40) + 30);
+      drawSectionTitle('Lifestyle Recommendations');
       if (lifestyleItems.length > 0) {
-        ensureSpace(140);
         const lifestyleCardY = doc.y;
         doc.roundedRect(pageLeft, lifestyleCardY, contentWidth, 130, 8).fill('#f0fdf4').strokeColor('#16a34a').lineWidth(1.5).stroke();
         doc.fillColor('#166534').font('Helvetica-Bold').fontSize(11).text('Wellness & Daily Habits', pageLeft + 12, lifestyleCardY + 10, { width: contentWidth - 24 });
