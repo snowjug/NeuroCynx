@@ -16,6 +16,7 @@ NeuroCynx is a modern, secure, and user-friendly platform designed to facilitate
 
 -   **Frontend:** React 18 (via CDN for lightweight deployment), HTML5, CSS3.
 -   **Backend:** Node.js + Express (Gemini proxy API).
+-   **Email Delivery:** Nodemailer (SMTP-based report emails).
 -   **Styling:** Custom CSS with CSS Variables, Flexbox/Grid.
 -   **Icons:** Ionicons.
 -   **Markdown Rendering:** Marked.js.
@@ -57,7 +58,7 @@ The frontend uses React via CDN and the backend runs a lightweight Express serve
     ```bash
     cp .env.example .env
     ```
-    Then set `GEMINI_API_KEY` in `.env`.
+    Then set `GEMINI_API_KEY` and SMTP values (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`) in `.env`.
 
 4.  **Start the app:**
     ```bash
@@ -68,7 +69,9 @@ The frontend uses React via CDN and the backend runs a lightweight Express serve
 ## 🔐 Security Notes
 
 -   Gemini API calls now go through `POST /api/gemini/generate` on the backend.
+-   Patient report emails are sent through `POST /api/report/email` on the backend.
 -   Keep `GEMINI_API_KEY` only on the server (environment variable), never in frontend code.
+-   Keep SMTP credentials only on the server (environment variable), never in frontend code.
 -   Ensure `.env` is not committed to git.
 
 ## 🤝 Contributing

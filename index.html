@@ -14,8 +14,6 @@
     <!-- Ionicons for Icons -->
     <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
-    <!-- HTML2PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <!-- Marked.js for Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Chart.js for Data Visualization -->
@@ -71,7 +69,7 @@
             throw new Error(errorMessage);
         };
 
-        const Navbar = ({ toggleTheme, isDark, setLanguage }) => {
+        const Navbar = ({ toggleTheme, isDark }) => {
             const [mobileMenu, setMobileMenu] = useState(false);
             const toggleMenu = () => setMobileMenu(!mobileMenu);
 
@@ -93,13 +91,6 @@
                             <a href="#contact">Contact</a>
                         </div>
                         <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                            <select className="lang-select" onChange={(e) => setLanguage(e.target.value)} defaultValue="English">
-                                <option value="English">EN</option>
-                                <option value="Spanish">ES</option>
-                                <option value="French">FR</option>
-                                <option value="German">DE</option>
-                                <option value="Hindi">HI</option>
-                            </select>
                             <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle Dark Mode">
                                 <ion-icon name={isDark ? "sunny-outline" : "moon-outline"} style={{fontSize: '20px'}}></ion-icon>
                             </button>
@@ -467,7 +458,7 @@
             );
         };
 
-        const UploadSection = ({ language }) => {
+        const UploadSection = () => {
             const HEALTH_METRIC_LABELS = ['Heart Health', 'Lung Function', 'Liver Health', 'Kidney Health', 'Metabolic Balance'];
             const [files, setFiles] = useState([]);
             const [isDragging, setIsDragging] = useState(false);
@@ -570,7 +561,7 @@
                         Heart Health, Lung Function, Liver Health, Kidney Health, Metabolic Balance.
                         Scores should be age-adjusted where age clues exist.
                         Return ONLY the JSON object. No markdown.
-                        IMPORTANT: Translate the entire response into ${language}.
+                        IMPORTANT: Return the entire response in English.
                     `;
                     
                     contents.push({ "text": prompt });
@@ -619,7 +610,7 @@
                     console.error("Upload/Analysis Error:", error);
                     if (error.message === "AI_UNAVAILABLE") {
                         const mockData = {
-                            "summary": "⚠️ DEMO MODE: Live AI analysis is temporarily unavailable. This is a simulated analysis based on typical healthy brain patterns. The uploaded scan shows normal structural integrity with slight localized activity in the frontal cortex suggesting mild cognitive fatigue.",
+                            "summary": "Demo preview: Live AI analysis is temporarily unavailable, so this report shows a sample whole-body health summary for layout preview only. Please consult a licensed clinician for clinical interpretation.",
                             "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
                             "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
                             "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
@@ -643,7 +634,7 @@
                     if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota") || error.message.includes("429")) {
                         // Fallback to Mock Data
                         const mockData = {
-                            "summary": "⚠️ DEMO MODE (API Quota Exceeded): This is a simulated analysis based on typical healthy brain patterns. The uploaded scan shows normal structural integrity with slight localized activity in the frontal cortex suggesting mild cognitive fatigue.",
+                            "summary": "Demo preview: Live AI analysis is currently rate-limited, so this report shows a sample whole-body health summary for layout preview only. Please consult a licensed clinician for clinical interpretation.",
                             "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
                             "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
                             "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
@@ -813,32 +804,50 @@
 
             const healthGraphData = getRelevantHealthGraph(analysis?.graph);
 
-            const handleEmailReport = () => {
+            const handleEmailReport = async () => {
                 const email = document.getElementById('userEmail')?.value;
+                const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
                 if (!email) {
                     alert("Please enter an email address above to send the report.");
                     return;
                 }
 
-                setEmailStatus('sending');
-                
-                const element = document.querySelector('.analysis-results');
-                const opt = {
-                    margin: 10,
-                    filename: `NeuroCynx_Report_${new Date().toISOString().slice(0,10)}.pdf`,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
+                if (!analysis) {
+                    alert("No analysis data found. Please run analysis first.");
+                    return;
+                }
 
-                // Simulate network delay then generate/download
-                setTimeout(() => {
-                    html2pdf().from(element).set(opt).save().then(() => {
-                        setEmailStatus('sent');
-                        setTimeout(() => setEmailStatus('idle'), 3000);
-                        alert(`Report successfully generated and sent to ${email}!`);
+                setEmailStatus('sending');
+                try {
+                    const response = await fetch('/api/report/email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            to: email,
+                            patientName,
+                            analysis: {
+                                summary: analysis.summary,
+                                care: analysis.care,
+                                medicine: analysis.medicine,
+                                lifestyle: analysis.lifestyle,
+                                graph: healthGraphData
+                            }
+                        })
                     });
-                }, 1500);
+
+                    const payload = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(payload?.error?.message || 'Unable to send email report right now.');
+                    }
+
+                    setEmailStatus('sent');
+                    setTimeout(() => setEmailStatus('idle'), 3000);
+                    alert(`Report emailed successfully to ${email}.`);
+                } catch (error) {
+                    setEmailStatus('idle');
+                    alert(`Failed to send email report: ${error.message}`);
+                }
             };
 
             return (
@@ -904,7 +913,7 @@
                                                 ) : emailStatus === 'sent' ? (
                                                     <>Sent Successfully <ion-icon name="checkmark-circle-outline"></ion-icon></>
                                                 ) : (
-                                                    <>Email Report PDF <ion-icon name="mail-outline"></ion-icon></>
+                                                    <>Email Report <ion-icon name="mail-outline"></ion-icon></>
                                                 )}
                                             </button>
                                             {analysis.swot?.threats?.length > 0 && (
@@ -1160,7 +1169,6 @@
 
         const App = () => {
             const [isDark, setIsDark] = useState(false);
-            const [language, setLanguage] = useState('English');
 
             useEffect(() => {
                 const savedTheme = localStorage.getItem('theme');
@@ -1187,13 +1195,13 @@
 
             return (
                 <React.Fragment>
-                    <Navbar toggleTheme={toggleTheme} isDark={isDark} language={language} setLanguage={setLanguage} />
+                    <Navbar toggleTheme={toggleTheme} isDark={isDark} />
                     <Hero />
                     <StatsStrip />
                     <HealthTips />
                     <Features />
                     <ProcessWorkflow />
-                    <UploadSection language={language} />
+                    <UploadSection />
                     <ComplianceSection />
                     <Footer />
                 </React.Fragment>
