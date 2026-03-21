@@ -465,6 +465,7 @@
             const [status, setStatus] = useState('idle'); // idle, uploading, analyzing, success, error
             const [analysis, setAnalysis] = useState(null);
             const [analysisError, setAnalysisError] = useState('');
+            const [analysisWarning, setAnalysisWarning] = useState('');
             const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent
             const [showBookingModal, setShowBookingModal] = useState(false);
             const [isPlayingVoice, setIsPlayingVoice] = useState(false);
@@ -510,7 +511,28 @@
                 setFiles(prev => [...prev, ...filesArr]);
                 setAnalysis(null);
                 setAnalysisError('');
+                setAnalysisWarning('');
             };
+
+            const getDemoPreviewAnalysis = () => ({
+                summary: 'Demo Preview: Live AI analysis is temporarily unavailable. This is a simulated report preview and not a clinical diagnosis.',
+                care: ['Maintain regular sleep schedule (7-8 hours)', 'Stay hydrated (2-3 liters/day)', 'Take short breaks during intense work'],
+                medicine: ['General wellness supplements only after clinician advice'],
+                lifestyle: ['Add moderate daily walking', 'Reduce late-night screen exposure', 'Adopt balanced meals and stress management'],
+                swot: {
+                    strengths: ['No critical red flags in preview template', 'Consistent baseline wellness indicators', 'Suitable for preventive follow-up'],
+                    weaknesses: ['Limited by unavailable live AI interpretation', 'No document-specific personalized findings', 'Needs clinician verification'],
+                    opportunities: ['Schedule preventive check-up', 'Improve hydration and sleep routines', 'Track vitals weekly for trends'],
+                    threats: ['Potential missed context without live analysis', 'Delayed specialist review risk', 'Self-interpretation without clinician guidance']
+                },
+                graph: [
+                    { label: 'Heart Health', score: 82 },
+                    { label: 'Lung Function', score: 79 },
+                    { label: 'Liver Health', score: 80 },
+                    { label: 'Kidney Health', score: 78 },
+                    { label: 'Metabolic Balance', score: 76 }
+                ]
+            });
 
             const fileToBase64 = (file) => {
                 return new Promise((resolve, reject) => {
@@ -533,6 +555,7 @@
 
                 setStatus('uploading');
                 setAnalysisError('');
+                setAnalysisWarning('');
                 
                 try {
                     await new Promise(r => setTimeout(r, 1000));
@@ -609,21 +632,25 @@
                     setAnalysis(analysisData);
                     setStatus('success');
                     setAnalysisError('');
+                    setAnalysisWarning('');
 
                 } catch (error) {
                     console.error("Upload/Analysis Error:", error);
                     if (error.message === "AI_UNAVAILABLE") {
-                        setAnalysis(null);
-                        setStatus('error');
-                        setAnalysisError('Live AI analysis is currently unavailable. Please try again shortly or contact support.');
+                        setAnalysis(getDemoPreviewAnalysis());
+                        setStatus('success');
+                        setAnalysisError('');
+                        setAnalysisWarning('Warning: Live AI analysis is currently unavailable. Showing demo preview results.');
                     } else
                     if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota") || error.message.includes("429")) {
-                        setAnalysis(null);
-                        setStatus('error');
-                        setAnalysisError('Live AI analysis is rate-limited right now. Please retry in a few minutes.');
+                        setAnalysis(getDemoPreviewAnalysis());
+                        setStatus('success');
+                        setAnalysisError('');
+                        setAnalysisWarning('Warning: Live AI analysis is rate-limited right now. Showing demo preview results.');
                     } else {
                         setAnalysis(null);
                         setStatus('error');
+                        setAnalysisWarning('');
                         setAnalysisError("Analysis failed: " + error.message);
                     }
                 }
@@ -870,6 +897,9 @@
                                 <div className="analysis-results fade-up">
                                     <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
                                         <h2 style={{color: 'var(--accent)'}}>Analysis Complete</h2>
+                                        {analysisWarning && (
+                                            <p style={{maxWidth: '720px', margin: '0 auto 12px auto', color: '#b45309', background: '#fffbeb', border: '1px solid #fbbf24', padding: '10px 14px', borderRadius: '10px', fontSize: '14px', fontWeight: 600}}>{analysisWarning}</p>
+                                        )}
                                         <p>{analysis.summary}</p>
                                         <div className="analysis-actions" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
                                             <button className={`analysis-action-btn voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
