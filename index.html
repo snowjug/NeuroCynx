@@ -32,59 +32,30 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        const GEMINI_KEY_STORAGE = 'NEUROCYNX_GEMINI_API_KEY';
-        const GEMINI_FALLBACK_MODELS = [
-            'gemini-3-flash-preview',
-            'gemini-3.1-pro-preview'
-        ];
+        const generateWithGeminiFallback = async ({ parts, responseMimeType }) => {
+            const response = await fetch('/api/gemini/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parts, responseMimeType })
+            });
 
-        const getRuntimeGeminiApiKey = () => {
-            const globalKey = typeof window.__GEMINI_API_KEY === 'string' ? window.__GEMINI_API_KEY.trim() : '';
-            if (globalKey) return globalKey;
-
-            const sessionKey = window.sessionStorage.getItem(GEMINI_KEY_STORAGE)?.trim();
-            if (sessionKey) return sessionKey;
-
-            const entered = window.prompt('Enter your Gemini API key for this session. It will not be saved in source code.');
-            if (!entered) return '';
-
-            const key = entered.trim();
-            if (!key) return '';
-            window.sessionStorage.setItem(GEMINI_KEY_STORAGE, key);
-            return key;
-        };
-
-        const generateWithGeminiFallback = async ({ apiKey, parts, responseMimeType }) => {
-            let lastErrorMessage = 'All models failed.';
-
-            for (const model of GEMINI_FALLBACK_MODELS) {
-                try {
-                    const payload = {
-                        contents: [{ parts }]
-                    };
-
-                    if (responseMimeType) {
-                        payload.generationConfig = { response_mime_type: responseMimeType };
-                    }
-
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    const result = await response.json();
-                    if (response.ok) {
-                        return result;
-                    }
-
-                    lastErrorMessage = result.error?.message || `Model ${model} failed.`;
-                } catch (error) {
-                    lastErrorMessage = error.message || `Network error with model ${model}.`;
-                }
+            const result = await response.json();
+            if (response.ok) {
+                return result;
             }
 
-            throw new Error(lastErrorMessage);
+            const errorCode = result?.error?.code || '';
+            const errorMessage = result?.error?.message || 'AI Error';
+
+            if (errorCode === 'SERVICE_UNAVAILABLE') {
+                throw new Error('AI_UNAVAILABLE');
+            }
+
+            if (errorCode === 'QUOTA_EXCEEDED' || /quota|429/i.test(errorMessage)) {
+                throw new Error('QUOTA_EXCEEDED');
+            }
+
+            throw new Error(errorMessage);
         };
 
         const Navbar = ({ toggleTheme, isDark, setLanguage }) => {
@@ -385,10 +356,6 @@
                 setIsTyping(true);
 
                 try {
-                    const API_KEY = getRuntimeGeminiApiKey();
-                    if (!API_KEY) {
-                        throw new Error('MISSING_API_KEY');
-                    }
                     const prompt = `
                         You are a helpful medical AI assistant. The user just received this medical report summary:
                         "${contextData.summary}"
@@ -399,15 +366,14 @@
                     `;
 
                     const result = await generateWithGeminiFallback({
-                        apiKey: API_KEY,
                         parts: [{ text: prompt }]
                     });
                     
                     const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || "I apologize, but I couldn't generate a response based on that query.";
                     setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
                 } catch (error) {
-                    if (error.message === "MISSING_API_KEY") {
-                        setMessages(prev => [...prev, { role: 'ai', text: "I need a Gemini API key to answer live AI questions. Add one when prompted and try again." }]);
+                    if (error.message === "AI_UNAVAILABLE") {
+                        setMessages(prev => [...prev, { role: 'ai', text: "Live AI assistant is temporarily unavailable. Please contact support for help with this report." }]);
                     } else
                     if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota")) {
                          setMessages(prev => [...prev, { role: 'ai', text: "(Demo Mode) I am currently unable to access the live AI model due to usage limits. However, generally speaking, consulting a specialist is always recommended for specific symptoms." }]);
@@ -561,11 +527,6 @@
                 setStatus('uploading');
                 
                 try {
-                    const API_KEY = getRuntimeGeminiApiKey();
-                    if (!API_KEY) {
-                        throw new Error("MISSING_API_KEY");
-                    }
-
                     await new Promise(r => setTimeout(r, 1000));
                     
                     setStatus('analyzing');
@@ -610,7 +571,6 @@
                     }
 
                     const result = await generateWithGeminiFallback({
-                        apiKey: API_KEY,
                         parts: contents,
                         responseMimeType: 'application/json'
                     });
@@ -640,9 +600,27 @@
 
                 } catch (error) {
                     console.error("Upload/Analysis Error:", error);
-                    if (error.message === "MISSING_API_KEY") {
-                        setStatus('error');
-                        alert("Missing Gemini API key. Add one when prompted and try again.");
+                    if (error.message === "AI_UNAVAILABLE") {
+                        const mockData = {
+                            "summary": "⚠️ DEMO MODE: Live AI analysis is temporarily unavailable. This is a simulated analysis based on typical healthy brain patterns. The uploaded scan shows normal structural integrity with slight localized activity in the frontal cortex suggesting mild cognitive fatigue.",
+                            "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
+                            "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
+                            "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
+                            "swot": {
+                                "strengths": ["Excellent neural connectivity", "No signs of structural atrophy", "Good vascular health"],
+                                "weaknesses": ["Minor signs of oxidative stress", "Vitamin D deficiency potential", "Eye strain indicators"],
+                                "opportunities": ["Preventative cognitive therapy", "Dietary optimization", "Supplementation regimen"],
+                                "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
+                            },
+                            "graph": [
+                                {"label": "Neural Efficiency", "score": 88},
+                                {"label": "Cognitive Load", "score": 65},
+                                {"label": "Memory Retention", "score": 92},
+                                {"label": "Stress Resilience", "score": 74}
+                            ]
+                        };
+                        setAnalysis(mockData);
+                        setStatus('success');
                     } else
                     if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota") || error.message.includes("429")) {
                         // Fallback to Mock Data

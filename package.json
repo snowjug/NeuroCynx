@@ -1,0 +1,17 @@
+{
+  "name": "neurocynx",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NeuroCynx secure consultation app with backend Gemini proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2"
+  }
+}

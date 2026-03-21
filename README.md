@@ -15,6 +15,7 @@ NeuroCynx is a modern, secure, and user-friendly platform designed to facilitate
 ## 🛠 Tech Stack
 
 -   **Frontend:** React 18 (via CDN for lightweight deployment), HTML5, CSS3.
+-   **Backend:** Node.js + Express (Gemini proxy API).
 -   **Styling:** Custom CSS with CSS Variables, Flexbox/Grid.
 -   **Icons:** Ionicons.
 -   **Markdown Rendering:** Marked.js.
@@ -25,17 +26,19 @@ NeuroCynx is a modern, secure, and user-friendly platform designed to facilitate
 NeuroCynx/
 ├── index.html      # Main application file (contains React components)
 ├── styles.css      # Core styles and variables
-├── script.js       # Helper scripts and hooks
+├── server.js       # Backend server and Gemini proxy endpoint
+├── .env.example    # Environment variable template
+├── package.json    # Node dependencies and scripts
 └── README.md       # Project documentation
 ```
 
 ## ⚡ Getting Started
 
-Since this project uses React via CDN, you don't need a complex build step like Webpack or Vite to get it running locally.
+The frontend uses React via CDN and the backend runs a lightweight Express server to keep API keys secure.
 
 ### Prerequisites
 -   A modern web browser (Chrome, Firefox, Edge, Safari).
--   A local web server (Recommended).
+-   Node.js 18+.
 
 ### Running the Project
 
@@ -45,15 +48,28 @@ Since this project uses React via CDN, you don't need a complex build step like 
     cd NeuroCynx
     ```
 
-2.  **Open `index.html`:**
-    *   You can open the file directly in your browser, but for the best experience (and to avoid CORS issues with some Babel standalone features), use a simple local server.
-    *   **Using VS Code Live Server:** Right-click `index.html` and select "Open with Live Server".
-    *   **Using Python:**
-        ```bash
-        # Python 3.x
-        python -m http.server 8000
-        ```
-        Then navigate to `http://localhost:8000`.
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Configure environment variables:**
+    ```bash
+    cp .env.example .env
+    ```
+    Then set `GEMINI_API_KEY` in `.env`.
+
+4.  **Start the app:**
+    ```bash
+    npm start
+    ```
+    Open `http://localhost:3000`.
+
+## 🔐 Security Notes
+
+-   Gemini API calls now go through `POST /api/gemini/generate` on the backend.
+-   Keep `GEMINI_API_KEY` only on the server (environment variable), never in frontend code.
+-   Ensure `.env` is not committed to git.
 
 ## 🤝 Contributing
 
