@@ -355,6 +355,22 @@ async function generatePDF(patientName, analysis) {
         doc.y = y + cardHeight + 10;
       };
 
+      const getRiskMeta = (metrics) => {
+        const list = Array.isArray(metrics) ? metrics : [];
+        if (!list.length) {
+          return { label: 'Unknown', score: 0, color: '#6b7280', bg: '#f3f4f6' };
+        }
+
+        const mean = Math.round(list.reduce((sum, item) => sum + Math.max(0, Math.min(100, Math.round(Number(item?.score) || 0))), 0) / list.length);
+        if (mean >= 80) {
+          return { label: 'Low Risk', score: mean, color: '#065f46', bg: '#ecfdf5' };
+        }
+        if (mean >= 60) {
+          return { label: 'Moderate Risk', score: mean, color: '#92400e', bg: '#fffbeb' };
+        }
+        return { label: 'High Risk', score: mean, color: '#991b1b', bg: '#fef2f2' };
+      };
+
       // Header band
       const headerTop = doc.y;
       doc.roundedRect(pageLeft, headerTop, contentWidth, 84, 10).fill('#0f172a');
@@ -369,6 +385,12 @@ async function generatePDF(patientName, analysis) {
       doc.roundedRect(pageLeft, patientCardY, contentWidth, 50, 8).fill(accentLight).strokeColor('#bfdbfe').lineWidth(1).stroke();
       doc.fillColor(textPrimary).font('Helvetica-Bold').fontSize(10).text('Patient', pageLeft + 12, patientCardY + 10);
       doc.fillColor(textSecondary).font('Helvetica').fontSize(11).text(toPlainText(patientName || 'Patient'), pageLeft + 12, patientCardY + 24, { width: contentWidth - 24 });
+
+      const riskMeta = getRiskMeta(Array.isArray(analysis?.graph) ? analysis.graph : []);
+      const riskPillWidth = 138;
+      const riskPillX = pageRight - riskPillWidth - 10;
+      doc.roundedRect(riskPillX, patientCardY + 10, riskPillWidth, 30, 14).fill(riskMeta.bg).strokeColor('#bfdbfe').lineWidth(1).stroke();
+      doc.fillColor(riskMeta.color).font('Helvetica-Bold').fontSize(9).text(`${riskMeta.label} • ${riskMeta.score}/100`, riskPillX + 10, patientCardY + 20, { width: riskPillWidth - 20, align: 'center' });
       doc.y = patientCardY + 62;
 
       // Summary
@@ -488,6 +510,29 @@ async function generatePDF(patientName, analysis) {
       doc.font('Helvetica').fontSize(8).fillColor('#6b7280').text('This report is AI-assisted and should not replace professional medical diagnosis or treatment.', pageLeft, doc.y, { width: contentWidth, align: 'center' });
       doc.moveDown(0.15);
       doc.text(`Report Generated: ${new Date().toLocaleString()}`, pageLeft, doc.y, { width: contentWidth, align: 'center' });
+
+      const range = doc.bufferedPageRange();
+      for (let i = 0; i < range.count; i++) {
+        doc.switchToPage(i);
+
+        doc.save();
+        doc.fillColor('#94a3b8');
+        doc.opacity(0.07);
+        doc.rotate(-32, { origin: [doc.page.width / 2, doc.page.height / 2] });
+        doc.font('Helvetica-Bold').fontSize(56).text('NEUCYN CONFIDENTIAL', 70, doc.page.height / 2 - 28, {
+          width: doc.page.width - 140,
+          align: 'center'
+        });
+        doc.restore();
+
+        doc.save();
+        doc.fillColor('#94a3b8').font('Helvetica').fontSize(8);
+        doc.text(`Page ${i + 1} of ${range.count}`, pageLeft, doc.page.height - doc.page.margins.bottom + 8, {
+          width: contentWidth,
+          align: 'right'
+        });
+        doc.restore();
+      }
 
       // Finalize PDF
       doc.end();

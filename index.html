@@ -866,6 +866,12 @@
             };
 
             const healthGraphData = getRelevantHealthGraph(analysis?.graph);
+            const overallHealthScore = Math.round(healthGraphData.reduce((sum, item) => sum + item.score, 0) / healthGraphData.length);
+            const riskMeta = overallHealthScore >= 80
+                ? { label: 'Low Risk', color: '#065f46', bg: '#ecfdf5', border: '#86efac' }
+                : overallHealthScore >= 60
+                    ? { label: 'Moderate Risk', color: '#92400e', bg: '#fffbeb', border: '#fcd34d' }
+                    : { label: 'High Risk', color: '#991b1b', bg: '#fef2f2', border: '#fca5a5' };
 
             const getReportPayload = () => {
                 const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
@@ -1049,6 +1055,10 @@
                                 <div className="analysis-results fade-up">
                                     <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
                                         <h2 style={{color: 'var(--accent)'}}>Analysis Complete</h2>
+                                        <div style={{display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '8px auto 14px auto', padding: '8px 14px', borderRadius: '999px', border: `1px solid ${riskMeta.border}`, background: riskMeta.bg, color: riskMeta.color, fontSize: '13px', fontWeight: 700}}>
+                                            <ion-icon name="shield-checkmark-outline"></ion-icon>
+                                            <span>{riskMeta.label} • {overallHealthScore}/100</span>
+                                        </div>
                                         {analysisWarning && (
                                             <p style={{maxWidth: '720px', margin: '0 auto 12px auto', color: '#b45309', background: '#fffbeb', border: '1px solid #fbbf24', padding: '10px 14px', borderRadius: '10px', fontSize: '14px', fontWeight: 600}}>{analysisWarning}</p>
                                         )}
@@ -1088,11 +1098,16 @@
                                         <div className="result-card" style={{gridColumn: '1 / -1', minHeight: '400px', position: 'relative', overflow: 'hidden'}}>
                                             {/* Dynamic Spider Web Background */}
                                             <NeuralBackground type="molecular" />
+                                            <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1}}>
+                                                <div style={{transform: 'rotate(-26deg)', fontSize: '34px', fontWeight: 800, letterSpacing: '3px', color: 'var(--text)', opacity: 0.06}}>
+                                                    NEUCYN CONFIDENTIAL
+                                                </div>
+                                            </div>
                                             
                                             <div className="metric-card-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', position: 'relative', zIndex: 2}}>
                                                 <h3 style={{marginBottom: 0, flex: '1 1 280px', minWidth: 0}}><ion-icon name="pulse-outline" style={{color: 'var(--accent)'}}></ion-icon> Overall Health Radar</h3>
                                                 <div className="metric-score-pill" style={{fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '4px 12px', borderRadius: '20px', border: '1px solid var(--border)', maxWidth: '100%'}}>
-                                                    Overall Health Score: <span style={{color: 'var(--accent)', fontWeight: 'bold'}}>{Math.round(healthGraphData.reduce((a,b) => a + b.score, 0) / healthGraphData.length)}/100</span>
+                                                    Overall Health Score: <span style={{color: 'var(--accent)', fontWeight: 'bold'}}>{overallHealthScore}/100</span>
                                                 </div>
                                             </div>
                                             <div className="health-graph" style={{position: 'relative', height: '350px', width: '100%', display: 'flex', justifyContent: 'center', zIndex: 2}}>
