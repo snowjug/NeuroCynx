@@ -428,7 +428,8 @@
             const doctors = [
                 { name: "Dr. Sarah Jenkins", spec: "Neurologist", avail: "Available Today" },
                 { name: "Dr. Michael Chen", spec: "Neurosurgeon", avail: "Available Tomorrow" },
-                { name: "Dr. Emily Rodriguez", spec: "Cognitive Specialist", avail: "Available in 2 days" }
+                { name: "Dr. Emily Rodriguez", spec: "Cognitive Specialist", avail: "Available in 2 days" },
+                { name: "Dr. Harsh Bamboo", spec: "General Physician", avail: "Available Today" }
             ];
 
             return (
@@ -720,11 +721,11 @@
                                             },
                                             pointLabels: { 
                                                 color: textColor, 
-                                                font: { family: 'Inter', size: 13, weight: '600' },
-                                                padding: 20
+                                                font: { family: 'Inter', size: 11, weight: '600' },
+                                                padding: 10
                                             },
                                             ticks: { 
-                                                display: true, 
+                                                display: false,
                                                 backdropColor: 'transparent',
                                                 color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
                                                 font: { size: 10 },
@@ -770,8 +771,7 @@
                         return;
                     }
                     const utterance = new SpeechSynthesisUtterance(text);
-                    const langMap = { "English": "en-US", "Spanish": "es-ES", "French": "fr-FR", "German": "de-DE", "Hindi": "hi-IN" };
-                    utterance.lang = langMap[language] || "en-US";
+                    utterance.lang = "en-US";
                     utterance.onend = () => setIsPlayingVoice(false);
                     setIsPlayingVoice(true);
                     window.speechSynthesis.speak(utterance);

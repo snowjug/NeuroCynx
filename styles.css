@@ -1001,6 +1001,11 @@ html:not([data-theme='dark']) .glass-panel {
     text-align: right;
 }
 
+.health-graph canvas {
+    width: 100% !important;
+    max-width: 540px;
+}
+
 /* Lists */
 .list-check {
     list-style: none;
@@ -1215,6 +1220,9 @@ html:not([data-theme='dark']) .glass-panel {
     .metric-score-pill {
         width: 100%;
         text-align: left;
+    }
+    .health-graph canvas {
+        max-width: 100%;
     }
 }
 
