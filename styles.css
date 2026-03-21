@@ -1739,3 +1739,51 @@ html:not([data-theme='dark']) .glass-panel {
     from { opacity: 0; transform: translateY(40px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Flowy Copyright Animation */
+.copyright-flowy {
+    text-align: center;
+    margin-top: 40px;
+    padding-top: 30px;
+    border-top: 1px solid var(--border);
+}
+
+.copyright-text {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 500;
+    background: linear-gradient(
+        90deg,
+        var(--text-secondary) 0%,
+        var(--accent) 25%,
+        var(--accent) 75%,
+        var(--text-secondary) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: flowyWave 3s ease-in-out infinite;
+    letter-spacing: 0.5px;
+}
+
+@keyframes flowyWave {
+    0% {
+        background-position: 200% 0;
+        transform: translateY(0) scaleY(1);
+    }
+    25% {
+        transform: translateY(-2px) scaleY(1.05);
+    }
+    50% {
+        background-position: -200% 0;
+        transform: translateY(0) scaleY(1);
+    }
+    75% {
+        transform: translateY(-2px) scaleY(1.05);
+    }
+    100% {
+        background-position: 200% 0;
+        transform: translateY(0) scaleY(1);
+    }
+}
