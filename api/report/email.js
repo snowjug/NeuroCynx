@@ -3,10 +3,31 @@ const PDFDocument = require('pdfkit');
 const { createCanvas } = require('canvas');
 const { Resend } = require('resend');
 
+const sanitizeSender = (value = '') => String(value).replaceAll(/[\r\n\t]+/g, ' ').trim();
+
+const extractSenderEmail = (value = '') => {
+  const input = String(value).trim();
+  const displayMatch = /<([^>]+)>/.exec(input);
+  return (displayMatch ? displayMatch[1] : input).trim().toLowerCase();
+};
+
+const isValidSender = (value = '') => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(extractSenderEmail(value));
+
 const getEmailConfig = () => {
   const configuredProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase().trim();
   const apiKey = process.env.EMAIL_API_KEY || process.env.RESEND_API_KEY || '';
-  const from = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com';
+  const rawFrom = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.tech';
+  let from = sanitizeSender(rawFrom);
+
+  // Auto-correct known wrong domain typo if present in old configs.
+  if (/@neucyn\.com\b/i.test(from)) {
+    from = from.replaceAll(/@neucyn\.com/gi, '@neucyn.tech');
+  }
+
+  if (!isValidSender(from)) {
+    from = 'no-reply@neucyn.tech';
+  }
+
   const provider = configuredProvider || (apiKey ? 'resend' : 'smtp');
   return { provider, apiKey, from };
 };
@@ -109,7 +130,7 @@ const sendViaResend = async ({ to, subject, html, pdfBuffer, filename }) => {
   });
 
   if (error) {
-    const errorDetail = error.message || error.toString();
+    const errorDetail = error.message || JSON.stringify(error);
     console.error('Resend API Error:', { error: errorDetail, from, to });
     throw new Error(`Resend failed: ${errorDetail}. Verify (1) API key is valid, (2) sender domain "${from}" is verified in Resend.`);
   }
@@ -460,13 +481,13 @@ async function reportEmailHandler(req, res) {
     const filename = `NeuCyn_Report_${Date.now()}.pdf`;
 
     // Send email with PDF attachment
-    const { provider } = getEmailConfig();
+    const { provider, from } = getEmailConfig();
     if (provider === 'resend') {
       await sendViaResend({ to: email, subject, html, pdfBuffer, filename });
     } else {
       const transporter = createTransporter();
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com',
+        from,
         to: email,
         subject,
         html,
