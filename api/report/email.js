@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
+const { createCanvas } = require('canvas');
 const { Resend } = require('resend');
 
 const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
@@ -59,61 +60,106 @@ const createTransporter = () => {
   });
 };
 
-// Generate radar chart image using QuickChart (free, no API key required)
+// Generate radar chart image locally using canvas
 async function generateRadarChart(graphData) {
   try {
-    const labels = Array.isArray(graphData) ? graphData.map((m) => String(m?.label || 'Metric')) : [];
-    const scores = Array.isArray(graphData)
-      ? graphData.map((m) => Math.max(0, Math.min(100, Number(m?.score) || 0)))
-      : [];
-
-    if (labels.length === 0 || scores.length === 0) {
+    const points = Array.isArray(graphData) ? graphData : [];
+    if (!points.length) {
       return null;
     }
 
-    const chartConfig = {
-      type: 'radar',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Health Score',
-            data: scores,
-            borderColor: '#7c3aed',
-            backgroundColor: 'rgba(124, 58, 237, 0.20)',
-            pointBackgroundColor: '#7c3aed',
-            pointRadius: 4,
-            borderWidth: 2
-          }
-        ]
-      },
-      options: {
-        plugins: { legend: { display: false } },
-        scales: {
-          r: {
-            min: 0,
-            max: 100,
-            ticks: { stepSize: 20, backdropColor: 'transparent' },
-            grid: { color: '#e6e6eb' },
-            angleLines: { color: '#e6e6eb' },
-            pointLabels: { color: '#1a1a1a', font: { size: 12 } }
-          }
+    const size = 700;
+    const canvas = createCanvas(size, size);
+    const ctx = canvas.getContext('2d');
+
+    const centerX = size / 2;
+    const centerY = size / 2;
+    const maxRadius = 230;
+    const levels = 5;
+    const angleSlice = (Math.PI * 2) / points.length;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+
+    for (let level = 1; level <= levels; level++) {
+      const radius = (maxRadius / levels) * level;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const angle = angleSlice * i - Math.PI / 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
         }
       }
-    };
-
-    const endpoint = `https://quickchart.io/chart?width=700&height=520&format=png&devicePixelRatio=2&backgroundColor=white&c=${encodeURIComponent(
-      JSON.stringify(chartConfig)
-    )}`;
-
-    const response = await fetch(endpoint);
-    if (!response.ok) {
-      return null;
+      ctx.closePath();
+      ctx.strokeStyle = '#e6e6eb';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
 
-    const arr = await response.arrayBuffer();
-    return Buffer.from(arr);
-  } catch (_error) {
+    for (let i = 0; i < points.length; i++) {
+      const angle = angleSlice * i - Math.PI / 2;
+      const x = centerX + maxRadius * Math.cos(angle);
+      const y = centerY + maxRadius * Math.sin(angle);
+
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const label = String(points[i]?.label || 'Metric');
+      const labelX = centerX + (maxRadius + 42) * Math.cos(angle);
+      const labelY = centerY + (maxRadius + 42) * Math.sin(angle);
+      ctx.font = 'bold 18px Arial';
+      ctx.fillStyle = '#1a1a1a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, labelX, labelY);
+    }
+
+    ctx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const angle = angleSlice * i - Math.PI / 2;
+      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
+      const radius = (maxRadius * score) / 100;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(124, 58, 237, 0.22)';
+    ctx.strokeStyle = '#7c3aed';
+    ctx.lineWidth = 3;
+    ctx.fill();
+    ctx.stroke();
+
+    for (let i = 0; i < points.length; i++) {
+      const angle = angleSlice * i - Math.PI / 2;
+      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
+      const radius = (maxRadius * score) / 100;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#7c3aed';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    return canvas.toBuffer('image/png');
+  } catch (error) {
+    console.error('Canvas chart generation failed:', error?.message || error);
     return null;
   }
 }
