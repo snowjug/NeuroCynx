@@ -50,7 +50,54 @@ const ensureSpaceFor = (doc, minSpace, marginBottom = 40) => {
   }
 };
 
-const buildResendTemplateHtml = ({ patientName, reportId, dateText, reportUrl, unsubscribeUrl, status }) => {
+const getReportInsights = (graphData) => {
+  const metrics = Array.isArray(graphData)
+    ? graphData.map((item) => ({
+      label: String(item?.label || 'Metric'),
+      score: Math.max(0, Math.min(100, Math.round(Number(item?.score) || 0)))
+    }))
+    : [];
+
+  if (!metrics.length) {
+    return {
+      metrics,
+      average: 0,
+      riskLabel: 'Unknown Risk',
+      topStrength: 'Not available',
+      focusArea: 'Not available'
+    };
+  }
+
+  const sorted = [...metrics].sort((a, b) => b.score - a.score);
+  const average = Math.round(metrics.reduce((sum, item) => sum + item.score, 0) / metrics.length);
+  let riskLabel = 'High Risk';
+  if (average >= 80) {
+    riskLabel = 'Low Risk';
+  } else if (average >= 60) {
+    riskLabel = 'Moderate Risk';
+  }
+
+  return {
+    metrics,
+    average,
+    riskLabel,
+    topStrength: `${sorted[0].label} (${sorted[0].score})`,
+    focusArea: `${sorted.at(-1).label} (${sorted.at(-1).score})`
+  };
+};
+
+const buildResendTemplateHtml = ({
+  patientName,
+  reportId,
+  dateText,
+  reportUrl,
+  unsubscribeUrl,
+  status,
+  riskLabel,
+  riskScore,
+  topStrength,
+  focusArea
+}) => {
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -59,35 +106,49 @@ const buildResendTemplateHtml = ({ patientName, reportId, dateText, reportUrl, u
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Neucyn Report</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
-  <div style="max-width:600px;margin:auto;background:#ffffff;border-radius:10px;overflow:hidden;">
-    <div style="background:#111827;color:#ffffff;padding:20px;text-align:center;">
-      <h1 style="margin:0;font-size:22px;letter-spacing:0.5px;">Neucyn</h1>
-      <div style="font-size:13px;opacity:0.8;margin-top:5px;">Automated Report</div>
+<body style="margin:0;padding:0;background:#e9eef7;font-family:Arial,sans-serif;">
+  <div style="max-width:620px;margin:24px auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe3ef;box-shadow:0 10px 30px rgba(2,6,23,0.06);">
+    <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#ffffff;padding:24px 22px;">
+      <h1 style="margin:0;font-size:24px;letter-spacing:0.3px;">Neucyn Report</h1>
+      <div style="font-size:13px;opacity:0.9;margin-top:6px;">Automated Health Insight Delivery</div>
+      <div style="margin-top:14px;display:inline-block;background:rgba(255,255,255,0.16);padding:7px 12px;border-radius:999px;font-size:12px;font-weight:bold;">
+        ${escapeHtml(riskLabel)} • ${escapeHtml(String(riskScore))}/100
+      </div>
     </div>
 
-    <div style="padding:25px 20px;color:#1f2937;line-height:1.6;">
+    <div style="padding:24px 22px;color:#1f2937;line-height:1.6;">
       <h2>Hello ${escapeHtml(patientName)},</h2>
       <p>Your requested report from <strong>neucyn.tech</strong> is ready. A full PDF is attached to this email.</p>
 
-      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:15px;margin:20px 0;">
-        <div style="font-weight:bold;margin-bottom:10px;font-size:15px;">Report Summary</div>
+      <div style="background:#f8fbff;border:1px solid #d9e7ff;border-radius:10px;padding:16px;margin:18px 0 14px 0;">
+        <div style="font-weight:bold;margin-bottom:10px;font-size:15px;color:#0f172a;">Report Summary</div>
 
         <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Report ID</span><span>${escapeHtml(reportId)}</span></div>
         <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Date Generated</span><span>${escapeHtml(dateText)}</span></div>
         <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Status</span><span>${escapeHtml(status)}</span></div>
       </div>
 
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px 0;">
+        <div style="background:#ecfdf5;border:1px solid #bbf7d0;border-radius:8px;padding:10px;">
+          <div style="font-size:12px;color:#065f46;font-weight:bold;">Top Strength</div>
+          <div style="font-size:13px;color:#1f2937;margin-top:3px;">${escapeHtml(topStrength)}</div>
+        </div>
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px;">
+          <div style="font-size:12px;color:#92400e;font-weight:bold;">Focus Area</div>
+          <div style="font-size:13px;color:#1f2937;margin-top:3px;">${escapeHtml(focusArea)}</div>
+        </div>
+      </div>
+
       <p>You can view the full detailed report using the button below:</p>
 
-      <a href="${escapeHtml(reportUrl)}" style="display:inline-block;margin-top:20px;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View Full Report</a>
+      <a href="${escapeHtml(reportUrl)}" style="display:inline-block;margin-top:10px;padding:12px 18px;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;">View Full Report</a>
 
       <p style="margin-top:25px;">If you did not request this report, please ignore this email or contact support.</p>
 
       <p>- Team Neucyn</p>
     </div>
 
-    <div style="text-align:center;padding:20px;font-size:12px;color:#6b7280;">
+    <div style="text-align:center;padding:20px;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;background:#f8fafc;">
       <p>© 2026 Neucyn.tech</p>
       <p>
         <a href="${escapeHtml(unsubscribeUrl)}" style="color:#2563eb;">Unsubscribe</a> •
@@ -273,6 +334,7 @@ async function generateRadarChart(graphData) {
 // Generate beautiful PDF report
 async function generatePDF(patientName, analysis) {
   const chartBuffer = await generateRadarChart(analysis?.graph);
+  const insights = getReportInsights(analysis?.graph);
 
   return new Promise((resolve, reject) => {
     try {
@@ -355,21 +417,42 @@ async function generatePDF(patientName, analysis) {
         doc.y = y + cardHeight + 10;
       };
 
-      const getRiskMeta = (metrics) => {
-        const list = Array.isArray(metrics) ? metrics : [];
-        if (!list.length) {
-          return { label: 'Unknown', score: 0, color: '#6b7280', bg: '#f3f4f6' };
+      const getRiskMeta = (riskLabel, score) => {
+        if (riskLabel === 'Low Risk') {
+          return { label: riskLabel, score, color: '#065f46', bg: '#ecfdf5' };
         }
-
-        const mean = Math.round(list.reduce((sum, item) => sum + Math.max(0, Math.min(100, Math.round(Number(item?.score) || 0))), 0) / list.length);
-        if (mean >= 80) {
-          return { label: 'Low Risk', score: mean, color: '#065f46', bg: '#ecfdf5' };
+        if (riskLabel === 'Moderate Risk') {
+          return { label: riskLabel, score, color: '#92400e', bg: '#fffbeb' };
         }
-        if (mean >= 60) {
-          return { label: 'Moderate Risk', score: mean, color: '#92400e', bg: '#fffbeb' };
+        if (riskLabel === 'High Risk') {
+          return { label: riskLabel, score, color: '#991b1b', bg: '#fef2f2' };
         }
-        return { label: 'High Risk', score: mean, color: '#991b1b', bg: '#fef2f2' };
+        return { label: 'Unknown Risk', score: 0, color: '#6b7280', bg: '#f3f4f6' };
       };
+
+      // Cover page
+      const coverTop = doc.y;
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill('#f8fafc');
+      doc.roundedRect(pageLeft, coverTop + 20, contentWidth, 170, 14).fill('#0f172a');
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(36).text('NeuCyn', pageLeft + 22, coverTop + 52);
+      doc.fillColor('#93c5fd').font('Helvetica').fontSize(14).text('Comprehensive Health Intelligence Report', pageLeft + 22, coverTop + 98);
+      doc.fillColor('#cbd5e1').font('Helvetica').fontSize(11).text(`Generated ${new Date().toLocaleString()}`, pageLeft + 22, coverTop + 122);
+
+      const coverRisk = getRiskMeta(insights.riskLabel, insights.average);
+      doc.roundedRect(pageLeft, coverTop + 216, contentWidth, 84, 10).fill('#ffffff').strokeColor('#dbe3ef').lineWidth(1).stroke();
+      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text('Patient', pageLeft + 16, coverTop + 230);
+      doc.fillColor('#4b5563').font('Helvetica').fontSize(12).text(toPlainText(patientName || 'Patient'), pageLeft + 16, coverTop + 246);
+      doc.roundedRect(pageRight - 170, coverTop + 232, 154, 28, 14).fill(coverRisk.bg).strokeColor('#bfdbfe').lineWidth(1).stroke();
+      doc.fillColor(coverRisk.color).font('Helvetica-Bold').fontSize(10).text(`${coverRisk.label} • ${coverRisk.score}/100`, pageRight - 162, coverTop + 242, { width: 138, align: 'center' });
+
+      doc.fillColor('#1f2937').font('Helvetica-Bold').fontSize(14).text('Key Highlights', pageLeft, coverTop + 326);
+      doc.roundedRect(pageLeft, coverTop + 352, contentWidth, 92, 8).fill('#ffffff').strokeColor('#dbe3ef').lineWidth(1).stroke();
+      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(11).text(`Top Strength: ${insights.topStrength}`, pageLeft + 14, coverTop + 370, { width: contentWidth - 28 });
+      doc.fillColor('#92400e').font('Helvetica-Bold').fontSize(11).text(`Focus Area: ${insights.focusArea}`, pageLeft + 14, coverTop + 392, { width: contentWidth - 28 });
+      doc.fillColor('#4b5563').font('Helvetica').fontSize(10).text('Detailed chart analysis, SWOT, and recommendations follow on next pages.', pageLeft + 14, coverTop + 415, { width: contentWidth - 28 });
+
+      doc.addPage();
+      doc.y = doc.page.margins.top;
 
       // Header band
       const headerTop = doc.y;
@@ -386,7 +469,7 @@ async function generatePDF(patientName, analysis) {
       doc.fillColor(textPrimary).font('Helvetica-Bold').fontSize(10).text('Patient', pageLeft + 12, patientCardY + 10);
       doc.fillColor(textSecondary).font('Helvetica').fontSize(11).text(toPlainText(patientName || 'Patient'), pageLeft + 12, patientCardY + 24, { width: contentWidth - 24 });
 
-      const riskMeta = getRiskMeta(Array.isArray(analysis?.graph) ? analysis.graph : []);
+      const riskMeta = getRiskMeta(insights.riskLabel, insights.average);
       const riskPillWidth = 138;
       const riskPillX = pageRight - riskPillWidth - 10;
       doc.roundedRect(riskPillX, patientCardY + 10, riskPillWidth, 30, 14).fill(riskMeta.bg).strokeColor('#bfdbfe').lineWidth(1).stroke();
@@ -399,7 +482,7 @@ async function generatePDF(patientName, analysis) {
       const summary = String(analysis?.summary || '').trim();
       doc.text(summary || 'No summary available.', pageLeft, doc.y, { width: contentWidth, align: 'left' });
       doc.moveDown(0.4);
-      drawHighlightCards(Array.isArray(analysis?.graph) ? analysis.graph : []);
+      drawHighlightCards(insights.metrics);
       doc.moveDown(0.5);
       drawDivider();
       doc.moveDown(0.5);
@@ -586,6 +669,7 @@ async function reportEmailHandler(req, res) {
 
     // Generate PDF
     const pdfBuffer = await generatePDF(patientName, analysis);
+    const insights = getReportInsights(analysis?.graph);
 
     const subject = 'Your NeuCyn Health Report';
     const reportId = `NCY-${Date.now().toString().slice(-8)}`;
@@ -594,6 +678,10 @@ async function reportEmailHandler(req, res) {
       reportId,
       dateText: new Date().toLocaleString(),
       status: 'Generated',
+      riskLabel: insights.riskLabel,
+      riskScore: insights.average,
+      topStrength: insights.topStrength,
+      focusArea: insights.focusArea,
       reportUrl: process.env.REPORT_URL || 'https://neucyn.tech',
       unsubscribeUrl: process.env.UNSUBSCRIBE_URL || 'https://neucyn.tech'
     });

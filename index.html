@@ -872,6 +872,9 @@
                 : overallHealthScore >= 60
                     ? { label: 'Moderate Risk', color: '#92400e', bg: '#fffbeb', border: '#fcd34d' }
                     : { label: 'High Risk', color: '#991b1b', bg: '#fef2f2', border: '#fca5a5' };
+            const sortedMetrics = [...healthGraphData].sort((a, b) => b.score - a.score);
+            const topStrength = sortedMetrics[0];
+            const focusArea = sortedMetrics[sortedMetrics.length - 1];
 
             const getReportPayload = () => {
                 const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
@@ -1063,6 +1066,20 @@
                                             <p style={{maxWidth: '720px', margin: '0 auto 12px auto', color: '#b45309', background: '#fffbeb', border: '1px solid #fbbf24', padding: '10px 14px', borderRadius: '10px', fontSize: '14px', fontWeight: 600}}>{analysisWarning}</p>
                                         )}
                                         <p>{analysis.summary}</p>
+                                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px', maxWidth: '760px', margin: '12px auto 0 auto'}}>
+                                            <div style={{background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '10px 12px', textAlign: 'left'}}>
+                                                <div style={{fontSize: '11px', color: '#1d4ed8', fontWeight: 700}}>Overall Score</div>
+                                                <div style={{fontSize: '14px', color: '#0f172a', fontWeight: 700, marginTop: '2px'}}>{overallHealthScore}/100</div>
+                                            </div>
+                                            <div style={{background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '10px', padding: '10px 12px', textAlign: 'left'}}>
+                                                <div style={{fontSize: '11px', color: '#065f46', fontWeight: 700}}>Top Strength</div>
+                                                <div style={{fontSize: '14px', color: '#0f172a', fontWeight: 700, marginTop: '2px'}}>{topStrength.label} ({topStrength.score})</div>
+                                            </div>
+                                            <div style={{background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '10px 12px', textAlign: 'left'}}>
+                                                <div style={{fontSize: '11px', color: '#92400e', fontWeight: 700}}>Focus Area</div>
+                                                <div style={{fontSize: '14px', color: '#0f172a', fontWeight: 700, marginTop: '2px'}}>{focusArea.label} ({focusArea.score})</div>
+                                            </div>
+                                        </div>
                                         <div className="analysis-actions" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
                                             <button className={`analysis-action-btn voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
                                                 <ion-icon name={isPlayingVoice ? "volume-high-outline" : "volume-medium-outline"}></ion-icon>
