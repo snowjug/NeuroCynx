@@ -4,9 +4,10 @@ const { createCanvas } = require('canvas');
 const { Resend } = require('resend');
 
 const getEmailConfig = () => {
-  const provider = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+  const configuredProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase().trim();
   const apiKey = process.env.EMAIL_API_KEY || process.env.RESEND_API_KEY || '';
   const from = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com';
+  const provider = configuredProvider || (apiKey ? 'resend' : 'smtp');
   return { provider, apiKey, from };
 };
 
@@ -17,6 +18,65 @@ const escapeHtml = (value = '') => {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+};
+
+const toPlainText = (value = '') => String(value).replaceAll(/[\r\n\t]+/g, ' ').trim();
+
+const ensureSpaceFor = (doc, minSpace, marginBottom = 40) => {
+  const bottomLimit = doc.page.height - marginBottom;
+  if (doc.y + minSpace > bottomLimit) {
+    doc.addPage();
+  }
+};
+
+const buildResendTemplateHtml = ({ patientName, reportId, dateText, reportUrl, unsubscribeUrl, status }) => {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neucyn Report</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
+  <div style="max-width:600px;margin:auto;background:#ffffff;border-radius:10px;overflow:hidden;">
+    <div style="background:#111827;color:#ffffff;padding:20px;text-align:center;">
+      <h1 style="margin:0;font-size:22px;letter-spacing:0.5px;">Neucyn</h1>
+      <div style="font-size:13px;opacity:0.8;margin-top:5px;">Automated Report</div>
+    </div>
+
+    <div style="padding:25px 20px;color:#1f2937;line-height:1.6;">
+      <h2>Hello ${escapeHtml(patientName)},</h2>
+      <p>Your requested report from <strong>neucyn.tech</strong> is ready. A full PDF is attached to this email.</p>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:15px;margin:20px 0;">
+        <div style="font-weight:bold;margin-bottom:10px;font-size:15px;">Report Summary</div>
+
+        <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Report ID</span><span>${escapeHtml(reportId)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Date Generated</span><span>${escapeHtml(dateText)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin:6px 0;font-size:14px;"><span>Status</span><span>${escapeHtml(status)}</span></div>
+      </div>
+
+      <p>You can view the full detailed report using the button below:</p>
+
+      <a href="${escapeHtml(reportUrl)}" style="display:inline-block;margin-top:20px;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">View Full Report</a>
+
+      <p style="margin-top:25px;">If you did not request this report, please ignore this email or contact support.</p>
+
+      <p>- Team Neucyn</p>
+    </div>
+
+    <div style="text-align:center;padding:20px;font-size:12px;color:#6b7280;">
+      <p>© 2026 Neucyn.tech</p>
+      <p>
+        <a href="${escapeHtml(unsubscribeUrl)}" style="color:#2563eb;">Unsubscribe</a> •
+        <a href="https://neucyn.tech" style="color:#2563eb;">Website</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+`;
 };
 
 const isEmailConfigured = () => {
@@ -196,7 +256,7 @@ async function generatePDF(patientName, analysis) {
 
       // Patient info
       doc.fontSize(10).font('Helvetica').fillColor(textPrimary);
-      doc.text(`Patient: ${escapeHtml(patientName || 'Patient')}`, { align: 'left' });
+      doc.text(`Patient: ${toPlainText(patientName || 'Patient')}`, { align: 'left' });
       doc.text(`Generated: ${new Date().toLocaleDateString()}`, { align: 'left' });
       doc.moveDown(1);
 
@@ -220,39 +280,38 @@ async function generatePDF(patientName, analysis) {
       }
 
       // Health Metrics Table
+      ensureSpaceFor(doc, 120);
       doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Health Metrics');
       doc.moveDown(0.5);
 
       const metrics = Array.isArray(analysis.graph) ? analysis.graph : [];
-      let tableY = doc.y;
-
       doc.fontSize(9).font('Helvetica-Bold').fillColor(accentColor);
-      doc.text('Metric', 50, tableY);
-      doc.text('Score', 450, tableY, { width: 60, align: 'right' });
-
-      tableY += 20;
-      doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, tableY).lineTo(555, tableY).stroke();
-
-      tableY += 8;
+      doc.text('Metric', 50, doc.y, { continued: true });
+      doc.text('Score', 450, doc.y, { width: 60, align: 'right' });
+      doc.moveDown(0.4);
+      doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+      doc.moveDown(0.4);
       doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
 
       metrics.forEach((metric) => {
+        ensureSpaceFor(doc, 26);
         const label = String(metric.label || 'Metric').substring(0, 30);
         const score = Math.max(0, Math.min(100, Math.round(Number(metric.score) || 0)));
 
-        doc.text(label, 50, tableY);
-        doc.font('Helvetica-Bold').fillColor(accentColor).text(`${score}/100`, 450, tableY, { width: 60, align: 'right' });
+        const rowY = doc.y;
+        doc.text(label, 50, rowY, { width: 370 });
+        doc.font('Helvetica-Bold').fillColor(accentColor).text(`${score}/100`, 450, rowY, { width: 60, align: 'right' });
         doc.font('Helvetica').fillColor(textSecondary);
-
-        tableY += 18;
-        doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, tableY).lineTo(555, tableY).stroke();
-        tableY += 4;
+        doc.y = rowY + 16;
+        doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+        doc.moveDown(0.35);
       });
 
       doc.moveDown(1);
 
       // SWOT Analysis
       if (analysis.swot && typeof analysis.swot === 'object') {
+        ensureSpaceFor(doc, 100);
         doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('SWOT Analysis');
         doc.moveDown(0.5);
 
@@ -264,11 +323,13 @@ async function generatePDF(patientName, analysis) {
         ];
 
         swotSections.forEach((section) => {
+          ensureSpaceFor(doc, 48);
           doc.fontSize(11).font('Helvetica-Bold').fillColor(section.color).text(section.title);
           doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
 
           if (Array.isArray(section.items) && section.items.length > 0) {
             section.items.forEach((item) => {
+              ensureSpaceFor(doc, 18);
               doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
             });
           } else {
@@ -283,10 +344,12 @@ async function generatePDF(patientName, analysis) {
 
       // Care Recommendations
       if (Array.isArray(analysis.care) && analysis.care.length > 0) {
+        ensureSpaceFor(doc, 70);
         doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Care Recommendations');
         doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
 
         analysis.care.forEach((item) => {
+          ensureSpaceFor(doc, 18);
           doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
         });
 
@@ -295,10 +358,12 @@ async function generatePDF(patientName, analysis) {
 
       // Medications
       if (Array.isArray(analysis.medicine) && analysis.medicine.length > 0) {
+        ensureSpaceFor(doc, 70);
         doc.fontSize(14).font('Helvetica-Bold').fillColor(accentColor).text('Medication Guidance');
         doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
 
         analysis.medicine.forEach((item) => {
+          ensureSpaceFor(doc, 18);
           doc.text(`Rx: ${String(item).substring(0, 66)}`, { width: 500 });
         });
 
@@ -308,10 +373,12 @@ async function generatePDF(patientName, analysis) {
 
       // Lifestyle Recommendations
       if (Array.isArray(analysis.lifestyle) && analysis.lifestyle.length > 0) {
+        ensureSpaceFor(doc, 70);
         doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Lifestyle Recommendations');
         doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
 
         analysis.lifestyle.forEach((item) => {
+          ensureSpaceFor(doc, 18);
           doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
         });
 
@@ -319,6 +386,7 @@ async function generatePDF(patientName, analysis) {
       }
 
       // Footer
+      ensureSpaceFor(doc, 48);
       doc.strokeColor(borderColor).lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
       doc.moveDown(0.5);
       doc.fontSize(8).fillColor('#999').text('This report is AI-assisted and should not replace a licensed clinician\'s diagnosis. Always consult with healthcare professionals for medical advice.', { align: 'center', width: 500 });
@@ -378,16 +446,15 @@ async function reportEmailHandler(req, res) {
     const pdfBuffer = await generatePDF(patientName, analysis);
 
     const subject = 'Your NeuCyn Health Report';
-    const html = `
-      <div style="font-family:Arial, sans-serif;max-width:700px;margin:0 auto;color:#1f2937;">
-        <h2>Hello ${escapeHtml(patientName || 'Patient')},</h2>
-        <p>Your NeuCyn health analysis report is attached as a PDF. Please open it to view your complete health assessment including SWOT analysis and health metrics.</p>
-        <p style="color:#6b7280;font-size:12px;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:20px;">
-          This report is AI-assisted and should not replace a licensed clinician's diagnosis.
-          Always consult with healthcare professionals for medical advice.
-        </p>
-      </div>
-    `;
+    const reportId = `NCY-${Date.now().toString().slice(-8)}`;
+    const html = buildResendTemplateHtml({
+      patientName: toPlainText(patientName || 'Patient'),
+      reportId,
+      dateText: new Date().toLocaleString(),
+      status: 'Generated',
+      reportUrl: process.env.REPORT_URL || 'https://neucyn.tech',
+      unsubscribeUrl: process.env.UNSUBSCRIBE_URL || 'https://neucyn.tech'
+    });
     const filename = `NeuCyn_Report_${Date.now()}.pdf`;
 
     // Send email with PDF attachment
