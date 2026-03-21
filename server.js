@@ -89,6 +89,45 @@ app.post('/api/gemini/generate', async (req, res) => {
 
 app.post('/api/report/email', reportEmailHandler);
 
+app.post('/api/report/pdf', async (req, res) => {
+  try {
+    if (typeof reportEmailHandler.generatePDF !== 'function') {
+      return res.status(500).json({
+        error: {
+          code: 'PDF_GENERATOR_UNAVAILABLE',
+          message: 'PDF generator is unavailable right now.'
+        }
+      });
+    }
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const { patientName, analysis } = body;
+
+    if (!analysis || typeof analysis !== 'object') {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_ANALYSIS',
+          message: 'Analysis payload is required.'
+        }
+      });
+    }
+
+    const pdfBuffer = await reportEmailHandler.generatePDF(patientName || 'Patient', analysis);
+    const filename = `NeuCyn_Report_${Date.now()}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({
+      error: {
+        code: 'PDF_GENERATION_FAILED',
+        message: error?.message || 'Failed to generate PDF report.'
+      }
+    });
+  }
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });

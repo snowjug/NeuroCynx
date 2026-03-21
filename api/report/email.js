@@ -424,3 +424,4 @@ async function reportEmailHandler(req, res) {
 }
 
 module.exports = reportEmailHandler;
+module.exports.generatePDF = generatePDF;

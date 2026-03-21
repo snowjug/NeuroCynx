@@ -467,6 +467,7 @@
             const [analysisError, setAnalysisError] = useState('');
             const [analysisWarning, setAnalysisWarning] = useState('');
             const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent
+            const [pdfStatus, setPdfStatus] = useState('idle'); // idle, generating, done
             const [showBookingModal, setShowBookingModal] = useState(false);
             const [isPlayingVoice, setIsPlayingVoice] = useState(false);
             const fileInputRef = useRef(null);
@@ -797,9 +798,23 @@
 
             const healthGraphData = getRelevantHealthGraph(analysis?.graph);
 
+            const getReportPayload = () => {
+                const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
+                return {
+                    patientName,
+                    analysis: {
+                        summary: analysis?.summary,
+                        care: analysis?.care,
+                        medicine: analysis?.medicine,
+                        lifestyle: analysis?.lifestyle,
+                        swot: analysis?.swot,
+                        graph: healthGraphData
+                    }
+                };
+            };
+
             const handleEmailReport = async () => {
                 const email = document.getElementById('userEmail')?.value;
-                const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
                 if (!email) {
                     alert("Please enter an email address above to send the report.");
                     return;
@@ -812,19 +827,13 @@
 
                 setEmailStatus('sending');
                 try {
+                    const reportPayload = getReportPayload();
                     const response = await fetch('/api/report/email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             to: email,
-                            patientName,
-                            analysis: {
-                                summary: analysis.summary,
-                                care: analysis.care,
-                                medicine: analysis.medicine,
-                                lifestyle: analysis.lifestyle,
-                                graph: healthGraphData
-                            }
+                            ...reportPayload
                         })
                     });
 
@@ -840,6 +849,44 @@
                 } catch (error) {
                     setEmailStatus('idle');
                     alert(`Failed to send email report: ${error.message}`);
+                }
+            };
+
+            const handleDownloadPdf = async () => {
+                if (!analysis) {
+                    alert("No analysis data found. Please run analysis first.");
+                    return;
+                }
+
+                setPdfStatus('generating');
+                try {
+                    const reportPayload = getReportPayload();
+                    const response = await fetch('/api/report/pdf', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(reportPayload)
+                    });
+
+                    if (!response.ok) {
+                        const payload = await response.json().catch(() => ({}));
+                        throw new Error(payload?.error?.message || 'Unable to generate PDF right now.');
+                    }
+
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `NeuCyn_Report_${Date.now()}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+
+                    setPdfStatus('done');
+                    setTimeout(() => setPdfStatus('idle'), 3000);
+                } catch (error) {
+                    setPdfStatus('idle');
+                    alert(`Failed to download PDF: ${error.message}`);
                 }
             };
 
@@ -913,6 +960,15 @@
                                                     <>Sent Successfully <ion-icon name="checkmark-circle-outline"></ion-icon></>
                                                 ) : (
                                                     <>Email Report <ion-icon name="mail-outline"></ion-icon></>
+                                                )}
+                                            </button>
+                                            <button className="analysis-action-btn" onClick={handleDownloadPdf}>
+                                                {pdfStatus === 'generating' ? (
+                                                    <>Generating <ion-icon name="sync-outline" className="spin"></ion-icon></>
+                                                ) : pdfStatus === 'done' ? (
+                                                    <>Downloaded <ion-icon name="checkmark-circle-outline"></ion-icon></>
+                                                ) : (
+                                                    <>Download PDF <ion-icon name="download-outline"></ion-icon></>
                                                 )}
                                             </button>
                                             {analysis.swot?.threats?.length > 0 && (
