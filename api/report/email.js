@@ -294,7 +294,7 @@ async function generateRadarChart(graphData) {
     ctx.stroke();
 
     for (const point of plotPoints) {
-      const { x, y, score } = point;
+      const { x, y } = point;
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#7c3aed';
@@ -302,12 +302,6 @@ async function generateRadarChart(graphData) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
-      
-      ctx.fillStyle = '#1f2937';
-      ctx.font = 'bold 11px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(score), x, y - 12);
     }
 
     return canvas.toBuffer('image/png');
