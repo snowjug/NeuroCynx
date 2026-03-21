@@ -992,6 +992,15 @@ html:not([data-theme='dark']) .glass-panel {
     border-radius: 14px;
 }
 
+.metric-card-header {
+    width: 100%;
+}
+
+.metric-score-pill {
+    white-space: normal;
+    text-align: right;
+}
+
 /* Lists */
 .list-check {
     list-style: none;
@@ -1202,7 +1211,11 @@ html:not([data-theme='dark']) .glass-panel {
 
 @media (max-width: 768px) {
     .result-grid { grid-template-columns: 1fr; }
-    .swot-grid { grid-template-columns: 1fr; } 
+    .swot-grid { grid-template-columns: 1fr; }
+    .metric-score-pill {
+        width: 100%;
+        text-align: left;
+    }
 }
 
 
@@ -1586,3 +1599,4 @@ html:not([data-theme='dark']) .glass-panel {
 @keyframes slideUp {
     from { opacity: 0; transform: translateY(40px); }
     to { opacity: 1; transform: translateY(0); }
+}

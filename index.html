@@ -468,6 +468,7 @@
         };
 
         const UploadSection = ({ language }) => {
+            const HEALTH_METRIC_LABELS = ['Heart Health', 'Lung Function', 'Liver Health', 'Kidney Health', 'Metabolic Balance'];
             const [files, setFiles] = useState([]);
             const [isDragging, setIsDragging] = useState(false);
             const [status, setStatus] = useState('idle'); // idle, uploading, analyzing, success, error
@@ -548,8 +549,8 @@
                     const contents = [];
                     
                     const prompt = `
-                        You are an expert neurologist. Analyze the provided medical report(s). 
-                        Generate a comprehensive health assessment in this strict JSON format:
+                        You are an expert general physician. Analyze the provided medical report(s). 
+                        Generate a comprehensive whole-body health assessment in this strict JSON format:
                         {
                             "summary": "Detailed professional summary.",
                             "care": ["Step 1", "Step 2"],
@@ -565,7 +566,10 @@
                                 {"label": "Metric Name", "score": 80}
                             ]
                         }
-                        Ensure 'graph' has 4 metrics with scores 0-100. Return ONLY the JSON object. No markdown.
+                        Ensure 'graph' has exactly 5 metrics with scores 0-100 for these labels only:
+                        Heart Health, Lung Function, Liver Health, Kidney Health, Metabolic Balance.
+                        Scores should be age-adjusted where age clues exist.
+                        Return ONLY the JSON object. No markdown.
                         IMPORTANT: Translate the entire response into ${language}.
                     `;
                     
@@ -626,10 +630,11 @@
                                 "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
                             },
                             "graph": [
-                                {"label": "Neural Efficiency", "score": 88},
-                                {"label": "Cognitive Load", "score": 65},
-                                {"label": "Memory Retention", "score": 92},
-                                {"label": "Stress Resilience", "score": 74}
+                                {"label": "Heart Health", "score": 86},
+                                {"label": "Lung Function", "score": 81},
+                                {"label": "Liver Health", "score": 83},
+                                {"label": "Kidney Health", "score": 79},
+                                {"label": "Metabolic Balance", "score": 77}
                             ]
                         };
                         setAnalysis(mockData);
@@ -649,10 +654,11 @@
                                 "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
                             },
                             "graph": [
-                                {"label": "Neural Efficiency", "score": 88},
-                                {"label": "Cognitive Load", "score": 65},
-                                {"label": "Memory Retention", "score": 92},
-                                {"label": "Stress Resilience", "score": 74}
+                                {"label": "Heart Health", "score": 85},
+                                {"label": "Lung Function", "score": 80},
+                                {"label": "Liver Health", "score": 82},
+                                {"label": "Kidney Health", "score": 78},
+                                {"label": "Metabolic Balance", "score": 76}
                             ]
                         };
                         alert("Note: API Quota Exceeded. Showing DEMO analysis results.");
@@ -672,7 +678,7 @@
                         if (results) results.classList.add('visible');
                         
                         // Initialize Chart.js with Improved Visuals
-                        if (chartRef.current && analysis.graph) {
+                        if (chartRef.current && healthGraphData.length) {
                             if (chartInstance.current) {
                                 chartInstance.current.destroy();
                             }
@@ -690,10 +696,10 @@
                             chartInstance.current = new Chart(ctx, {
                                 type: 'radar',
                                 data: {
-                                    labels: analysis.graph.map(g => g.label),
+                                    labels: healthGraphData.map(g => g.label.length > 14 ? g.label.split(' ') : g.label),
                                     datasets: [{
                                         label: 'Health Score',
-                                        data: analysis.graph.map(g => g.score),
+                                        data: healthGraphData.map(g => g.score),
                                         backgroundColor: gradient,
                                         borderColor: accentColor,
                                         borderWidth: 3,
@@ -792,6 +798,20 @@
                 if (!items) return null;
                 return items.map((s, i) => <li key={i}>{s}</li>);
             };
+
+            const getRelevantHealthGraph = (rawGraph) => {
+                const fallbackScores = [84, 79, 82, 78, 76];
+                const source = Array.isArray(rawGraph) ? rawGraph : [];
+                return HEALTH_METRIC_LABELS.map((label, index) => {
+                    const score = Number(source[index]?.score);
+                    return {
+                        label,
+                        score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : fallbackScores[index]
+                    };
+                });
+            };
+
+            const healthGraphData = getRelevantHealthGraph(analysis?.graph);
 
             const handleEmailReport = () => {
                 const email = document.getElementById('userEmail')?.value;
@@ -900,10 +920,10 @@
                                             {/* Dynamic Spider Web Background */}
                                             <NeuralBackground type="molecular" />
                                             
-                                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', position: 'relative', zIndex: 2}}>
-                                                <h3><ion-icon name="stats-chart-outline" style={{color: 'var(--accent)'}}></ion-icon> Neuro-Metric Analysis</h3>
-                                                <div style={{fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '4px 12px', borderRadius: '20px', border: '1px solid var(--border)'}}>
-                                                    Overall Health Score: <span style={{color: 'var(--accent)', fontWeight: 'bold'}}>{analysis.graph ? Math.round(analysis.graph.reduce((a,b) => a + b.score, 0) / analysis.graph.length) : 0}/100</span>
+                                            <div className="metric-card-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', position: 'relative', zIndex: 2}}>
+                                                <h3 style={{marginBottom: 0, flex: '1 1 280px', minWidth: 0}}><ion-icon name="pulse-outline" style={{color: 'var(--accent)'}}></ion-icon> Overall Health Radar</h3>
+                                                <div className="metric-score-pill" style={{fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '4px 12px', borderRadius: '20px', border: '1px solid var(--border)', maxWidth: '100%'}}>
+                                                    Overall Health Score: <span style={{color: 'var(--accent)', fontWeight: 'bold'}}>{Math.round(healthGraphData.reduce((a,b) => a + b.score, 0) / healthGraphData.length)}/100</span>
                                                 </div>
                                             </div>
                                             <div className="health-graph" style={{position: 'relative', height: '350px', width: '100%', display: 'flex', justifyContent: 'center', zIndex: 2}}>
