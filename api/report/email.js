@@ -262,12 +262,6 @@ async function generateRadarChart(graphData) {
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      const tickValue = String((100 / levels) * level);
-      ctx.font = 'bold 13px Arial';
-      ctx.fillStyle = '#6b7280';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(tickValue, centerX + 6, centerY - radius);
     }
 
     for (let i = 0; i < points.length; i++) {
@@ -281,20 +275,6 @@ async function generateRadarChart(graphData) {
       ctx.strokeStyle = '#d1d5db';
       ctx.lineWidth = 1;
       ctx.stroke();
-
-      const label = String(points[i]?.label || 'Metric');
-      const labelX = centerX + (maxRadius + 54) * Math.cos(angle);
-      const labelY = centerY + (maxRadius + 54) * Math.sin(angle);
-      ctx.font = 'bold 17px Arial';
-      ctx.fillStyle = '#1a1a1a';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, labelX, labelY);
-
-      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
-      ctx.font = 'bold 14px Arial';
-      ctx.fillStyle = '#1d4ed8';
-      ctx.fillText(`${Math.round(score)}`, labelX, labelY + 18);
     }
 
     ctx.beginPath();
@@ -599,20 +579,11 @@ async function generatePDF(patientName, analysis) {
         doc.switchToPage(i);
 
         doc.save();
-        doc.fillColor('#94a3b8');
-        doc.opacity(0.07);
-        doc.rotate(-32, { origin: [doc.page.width / 2, doc.page.height / 2] });
-        doc.font('Helvetica-Bold').fontSize(56).text('NEUCYN CONFIDENTIAL', 70, doc.page.height / 2 - 28, {
-          width: doc.page.width - 140,
-          align: 'center'
-        });
-        doc.restore();
-
-        doc.save();
         doc.fillColor('#94a3b8').font('Helvetica').fontSize(8);
-        doc.text(`Page ${i + 1} of ${range.count}`, pageLeft, doc.page.height - doc.page.margins.bottom + 8, {
+        doc.text(`Page ${i + 1} of ${range.count}`, pageLeft, doc.page.height - doc.page.margins.bottom - 10, {
           width: contentWidth,
-          align: 'right'
+          align: 'right',
+          lineBreak: false
         });
         doc.restore();
       }
