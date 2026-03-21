@@ -39,7 +39,20 @@
                 body: JSON.stringify({ parts, responseMimeType })
             });
 
-            const result = await response.json();
+            const contentType = response.headers.get('content-type') || '';
+            const rawBody = await response.text();
+
+            let result;
+            if (contentType.includes('application/json')) {
+                try {
+                    result = JSON.parse(rawBody);
+                } catch (_error) {
+                    throw new Error('AI_UNAVAILABLE');
+                }
+            } else {
+                throw new Error('AI_UNAVAILABLE');
+            }
+
             if (response.ok) {
                 return result;
             }
