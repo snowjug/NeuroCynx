@@ -157,18 +157,31 @@ async function generateRadarChart(graphData) {
       return null;
     }
 
-    const size = 700;
+    const size = 760;
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext('2d');
 
     const centerX = size / 2;
     const centerY = size / 2;
-    const maxRadius = 230;
+    const maxRadius = 250;
     const levels = 5;
     const angleSlice = (Math.PI * 2) / points.length;
 
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, size, size);
+
+    const plotPoints = points.map((item, i) => {
+      const angle = angleSlice * i - Math.PI / 2;
+      const score = Math.max(0, Math.min(100, Number(item?.score) || 0));
+      const radius = (maxRadius * score) / 100;
+      return {
+        label: String(item?.label || `Metric ${i + 1}`),
+        score,
+        angle,
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle)
+      };
+    });
 
     for (let level = 1; level <= levels; level++) {
       const radius = (maxRadius / levels) * level;
@@ -187,6 +200,13 @@ async function generateRadarChart(graphData) {
       ctx.strokeStyle = '#e6e6eb';
       ctx.lineWidth = 1;
       ctx.stroke();
+
+      const tickValue = String((100 / levels) * level);
+      ctx.font = 'bold 13px Arial';
+      ctx.fillStyle = '#6b7280';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tickValue, centerX + 6, centerY - radius);
     }
 
     for (let i = 0; i < points.length; i++) {
@@ -202,9 +222,9 @@ async function generateRadarChart(graphData) {
       ctx.stroke();
 
       const label = String(points[i]?.label || 'Metric');
-      const labelX = centerX + (maxRadius + 42) * Math.cos(angle);
-      const labelY = centerY + (maxRadius + 42) * Math.sin(angle);
-      ctx.font = 'bold 18px Arial';
+      const labelX = centerX + (maxRadius + 54) * Math.cos(angle);
+      const labelY = centerY + (maxRadius + 54) * Math.sin(angle);
+      ctx.font = 'bold 17px Arial';
       ctx.fillStyle = '#1a1a1a';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -212,12 +232,8 @@ async function generateRadarChart(graphData) {
     }
 
     ctx.beginPath();
-    for (let i = 0; i < points.length; i++) {
-      const angle = angleSlice * i - Math.PI / 2;
-      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
-      const radius = (maxRadius * score) / 100;
-      const x = centerX + radius * Math.cos(angle);
-      const y = centerY + radius * Math.sin(angle);
+    for (let i = 0; i < plotPoints.length; i++) {
+      const { x, y } = plotPoints[i];
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -231,12 +247,8 @@ async function generateRadarChart(graphData) {
     ctx.fill();
     ctx.stroke();
 
-    for (let i = 0; i < points.length; i++) {
-      const angle = angleSlice * i - Math.PI / 2;
-      const score = Math.max(0, Math.min(100, Number(points[i]?.score) || 0));
-      const radius = (maxRadius * score) / 100;
-      const x = centerX + radius * Math.cos(angle);
-      const y = centerY + radius * Math.sin(angle);
+    for (const point of plotPoints) {
+      const { x, y, score, angle } = point;
       ctx.beginPath();
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fillStyle = '#7c3aed';
@@ -244,6 +256,23 @@ async function generateRadarChart(graphData) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.stroke();
+
+      const scoreX = x + 16 * Math.cos(angle);
+      const scoreY = y + 16 * Math.sin(angle);
+      const scoreLabel = `${Math.round(score)}`;
+
+      ctx.beginPath();
+      ctx.fillStyle = '#111827';
+      ctx.globalAlpha = 0.9;
+      ctx.roundRect(scoreX - 14, scoreY - 10, 28, 18, 6);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      ctx.font = 'bold 11px Arial';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(scoreLabel, scoreX, scoreY);
     }
 
     return canvas.toBuffer('image/png');
@@ -266,154 +295,149 @@ async function generatePDF(patientName, analysis) {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      // Define colors
-      const accentColor = '#7c3aed';
-      const textPrimary = '#1a1a1a';
-      const textSecondary = '#5e5e66';
-      const borderColor = '#e6e6eb';
+      const accentColor = '#1d4ed8';
+      const accentLight = '#eff6ff';
+      const textPrimary = '#111827';
+      const textSecondary = '#4b5563';
+      const borderColor = '#dbe3ef';
+      const pageLeft = doc.page.margins.left;
+      const pageRight = doc.page.width - doc.page.margins.right;
+      const contentWidth = pageRight - pageLeft;
 
-      // Header
-      doc.fontSize(28).font('Helvetica-Bold').fillColor(accentColor).text('NeuCyn', { align: 'left' });
-      doc.fontSize(12).font('Helvetica').fillColor(textSecondary).text('Health Analysis Report', { align: 'left', continued: true });
-      doc.moveDown(0.3);
+      const ensureSpace = (minSpace) => ensureSpaceFor(doc, minSpace, doc.page.margins.bottom);
 
-      // Patient info
-      doc.fontSize(10).font('Helvetica').fillColor(textPrimary);
-      doc.text(`Patient: ${toPlainText(patientName || 'Patient')}`, { align: 'left' });
-      doc.text(`Generated: ${new Date().toLocaleDateString()}`, { align: 'left' });
-      doc.moveDown(1);
+      const drawDivider = () => {
+        doc.strokeColor(borderColor).lineWidth(1).moveTo(pageLeft, doc.y).lineTo(pageRight, doc.y).stroke();
+      };
 
-      // Horizontal line
-      doc.strokeColor(borderColor).lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-      doc.moveDown(0.8);
+      const drawSectionTitle = (title) => {
+        ensureSpace(28);
+        doc.moveDown(0.15);
+        doc.font('Helvetica-Bold').fontSize(13).fillColor(textPrimary).text(title, pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.2);
+      };
 
-      // Summary Section
-      doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Summary');
-      doc.fontSize(10).font('Helvetica').fillColor(textSecondary);
-      const summary = String(analysis.summary || '').trim();
-      doc.text(summary || 'No summary available', { align: 'left', width: 515 });
-      doc.moveDown(1);
+      const drawBulletList = (items, { prefix = '•', color = textSecondary, maxItemLength = 160 } = {}) => {
+        if (!Array.isArray(items) || items.length === 0) {
+          doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('Not available', pageLeft, doc.y, { width: contentWidth });
+          doc.moveDown(0.4);
+          return;
+        }
 
-      // Health Radar Chart
-      if (chartBuffer) {
-        doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Health Radar');
-        doc.moveDown(0.5);
-        doc.image(chartBuffer, { fit: [250, 250], align: 'center' });
-        doc.moveDown(1);
-      }
+        items.forEach((item) => {
+          ensureSpace(18);
+          doc.font('Helvetica').fontSize(10).fillColor(color).text(`${prefix} ${String(item).substring(0, maxItemLength)}`, pageLeft + 2, doc.y, { width: contentWidth - 8 });
+        });
+        doc.moveDown(0.35);
+      };
 
-      // Health Metrics Table
-      ensureSpaceFor(doc, 120);
-      doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Health Metrics');
+      // Header band
+      const headerTop = doc.y;
+      doc.roundedRect(pageLeft, headerTop, contentWidth, 84, 10).fill('#0f172a');
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(24).text('NeuCyn', pageLeft + 18, headerTop + 14);
+      doc.font('Helvetica').fontSize(11).fillColor('#cbd5e1').text('Professional Health Analysis Report', pageLeft + 18, headerTop + 46);
+      doc.font('Helvetica').fontSize(10).fillColor('#93c5fd').text(`Generated ${new Date().toLocaleString()}`, pageLeft + 18, headerTop + 62);
+      doc.y = headerTop + 100;
+
+      // Patient card
+      ensureSpace(56);
+      const patientCardY = doc.y;
+      doc.roundedRect(pageLeft, patientCardY, contentWidth, 50, 8).fill(accentLight).strokeColor('#bfdbfe').lineWidth(1).stroke();
+      doc.fillColor(textPrimary).font('Helvetica-Bold').fontSize(10).text('Patient', pageLeft + 12, patientCardY + 10);
+      doc.fillColor(textSecondary).font('Helvetica').fontSize(11).text(toPlainText(patientName || 'Patient'), pageLeft + 12, patientCardY + 24, { width: contentWidth - 24 });
+      doc.y = patientCardY + 62;
+
+      // Summary
+      drawSectionTitle('Executive Summary');
+      doc.font('Helvetica').fontSize(10).fillColor(textSecondary);
+      const summary = String(analysis?.summary || '').trim();
+      doc.text(summary || 'No summary available.', pageLeft, doc.y, { width: contentWidth, align: 'left' });
+      doc.moveDown(0.5);
+      drawDivider();
       doc.moveDown(0.5);
 
-      const metrics = Array.isArray(analysis.graph) ? analysis.graph : [];
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(accentColor);
-      doc.text('Metric', 50, doc.y, { continued: true });
-      doc.text('Score', 450, doc.y, { width: 60, align: 'right' });
-      doc.moveDown(0.4);
-      doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-      doc.moveDown(0.4);
-      doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
+      // Chart
+      drawSectionTitle('Health Radar');
+      if (chartBuffer) {
+        ensureSpace(340);
+        const chartWidth = 320;
+        const chartX = pageLeft + (contentWidth - chartWidth) / 2;
+        doc.image(chartBuffer, chartX, doc.y, { fit: [chartWidth, chartWidth], align: 'center' });
+        doc.y += chartWidth + 10;
+      } else {
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('Radar chart could not be generated from provided data.', pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.3);
+      }
+
+      drawDivider();
+      doc.moveDown(0.6);
+
+      // Metrics table
+      drawSectionTitle('Metrics Overview');
+      const metrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
+      ensureSpace(34);
+      const tableTop = doc.y;
+      doc.roundedRect(pageLeft, tableTop, contentWidth, 26, 6).fill('#f8fafc').strokeColor(borderColor).lineWidth(1).stroke();
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(textPrimary).text('Metric', pageLeft + 12, tableTop + 8, { width: contentWidth - 100 });
+      doc.text('Score', pageRight - 72, tableTop + 8, { width: 60, align: 'right' });
+      doc.y = tableTop + 32;
 
       metrics.forEach((metric) => {
-        ensureSpaceFor(doc, 26);
-        const label = String(metric.label || 'Metric').substring(0, 30);
-        const score = Math.max(0, Math.min(100, Math.round(Number(metric.score) || 0)));
-
-        const rowY = doc.y;
-        doc.text(label, 50, rowY, { width: 370 });
-        doc.font('Helvetica-Bold').fillColor(accentColor).text(`${score}/100`, 450, rowY, { width: 60, align: 'right' });
-        doc.font('Helvetica').fillColor(textSecondary);
-        doc.y = rowY + 16;
-        doc.strokeColor(borderColor).lineWidth(0.5).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-        doc.moveDown(0.35);
+        ensureSpace(24);
+        const label = String(metric?.label || 'Metric').substring(0, 60);
+        const score = Math.max(0, Math.min(100, Math.round(Number(metric?.score) || 0)));
+        const rowTop = doc.y;
+        doc.rect(pageLeft, rowTop, contentWidth, 22).fill('#ffffff').strokeColor(borderColor).lineWidth(1).stroke();
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text(label, pageLeft + 12, rowTop + 6, { width: contentWidth - 100 });
+        doc.font('Helvetica-Bold').fontSize(10).fillColor(accentColor).text(`${score}/100`, pageRight - 72, rowTop + 6, { width: 60, align: 'right' });
+        doc.y = rowTop + 24;
       });
 
-      doc.moveDown(1);
+      doc.moveDown(0.3);
+      drawDivider();
+      doc.moveDown(0.6);
 
-      // SWOT Analysis
-      if (analysis.swot && typeof analysis.swot === 'object') {
-        ensureSpaceFor(doc, 100);
-        doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('SWOT Analysis');
-        doc.moveDown(0.5);
+      // SWOT
+      if (analysis?.swot && typeof analysis.swot === 'object') {
+        drawSectionTitle('SWOT Analysis');
 
         const swotSections = [
-          { title: 'Strengths', items: analysis.swot.strengths, color: '#10b981' },
-          { title: 'Weaknesses', items: analysis.swot.weaknesses, color: '#f59e0b' },
-          { title: 'Opportunities', items: analysis.swot.opportunities, color: '#3b82f6' },
-          { title: 'Threats', items: analysis.swot.threats, color: '#ef4444' }
+          { title: 'Strengths', items: analysis.swot.strengths, color: '#059669' },
+          { title: 'Weaknesses', items: analysis.swot.weaknesses, color: '#d97706' },
+          { title: 'Opportunities', items: analysis.swot.opportunities, color: '#2563eb' },
+          { title: 'Threats', items: analysis.swot.threats, color: '#dc2626' }
         ];
 
         swotSections.forEach((section) => {
-          ensureSpaceFor(doc, 48);
-          doc.fontSize(11).font('Helvetica-Bold').fillColor(section.color).text(section.title);
-          doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
-
-          if (Array.isArray(section.items) && section.items.length > 0) {
-            section.items.forEach((item) => {
-              ensureSpaceFor(doc, 18);
-              doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
-            });
-          } else {
-            doc.text('No items available');
-          }
-
-          doc.moveDown(0.5);
+          ensureSpace(38);
+          doc.font('Helvetica-Bold').fontSize(11).fillColor(section.color).text(section.title, pageLeft, doc.y, { width: contentWidth });
+          doc.moveDown(0.1);
+          drawBulletList(section.items, { color: textSecondary, maxItemLength: 180 });
         });
 
-        doc.moveDown(0.5);
+        drawDivider();
+        doc.moveDown(0.6);
       }
 
-      // Care Recommendations
-      if (Array.isArray(analysis.care) && analysis.care.length > 0) {
-        ensureSpaceFor(doc, 70);
-        doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Care Recommendations');
-        doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
+      // Recommendations
+      drawSectionTitle('Care Recommendations');
+      drawBulletList(analysis?.care, { maxItemLength: 180 });
 
-        analysis.care.forEach((item) => {
-          ensureSpaceFor(doc, 18);
-          doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
-        });
+      drawSectionTitle('Medication Guidance');
+      drawBulletList(analysis?.medicine, { prefix: 'Rx', maxItemLength: 180 });
+      doc.font('Helvetica-Oblique').fontSize(9).fillColor('#6b7280').text('Always consult a licensed physician before taking medications.', pageLeft, doc.y, { width: contentWidth });
+      doc.moveDown(0.5);
 
-        doc.moveDown(1);
-      }
-
-      // Medications
-      if (Array.isArray(analysis.medicine) && analysis.medicine.length > 0) {
-        ensureSpaceFor(doc, 70);
-        doc.fontSize(14).font('Helvetica-Bold').fillColor(accentColor).text('Medication Guidance');
-        doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
-
-        analysis.medicine.forEach((item) => {
-          ensureSpaceFor(doc, 18);
-          doc.text(`Rx: ${String(item).substring(0, 66)}`, { width: 500 });
-        });
-
-        doc.fontSize(8).fillColor('#666').text('Always consult with a licensed physician before taking medications.', { width: 500 });
-        doc.moveDown(1);
-      }
-
-      // Lifestyle Recommendations
-      if (Array.isArray(analysis.lifestyle) && analysis.lifestyle.length > 0) {
-        ensureSpaceFor(doc, 70);
-        doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Lifestyle Recommendations');
-        doc.fontSize(9).font('Helvetica').fillColor(textSecondary);
-
-        analysis.lifestyle.forEach((item) => {
-          ensureSpaceFor(doc, 18);
-          doc.text(`• ${String(item).substring(0, 70)}`, { width: 500 });
-        });
-
-        doc.moveDown(1.5);
-      }
+      drawSectionTitle('Lifestyle Recommendations');
+      drawBulletList(analysis?.lifestyle, { maxItemLength: 180 });
 
       // Footer
-      ensureSpaceFor(doc, 48);
-      doc.strokeColor(borderColor).lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-      doc.moveDown(0.5);
-      doc.fontSize(8).fillColor('#999').text('This report is AI-assisted and should not replace a licensed clinician\'s diagnosis. Always consult with healthcare professionals for medical advice.', { align: 'center', width: 500 });
-      doc.text(`Report Generated: ${new Date().toLocaleString()}`, { align: 'center', width: 500 });
+      ensureSpace(60);
+      drawDivider();
+      doc.moveDown(0.45);
+      doc.font('Helvetica').fontSize(8).fillColor('#6b7280').text('This report is AI-assisted and should not replace professional medical diagnosis or treatment.', pageLeft, doc.y, { width: contentWidth, align: 'center' });
+      doc.moveDown(0.15);
+      doc.text(`Report Generated: ${new Date().toLocaleString()}`, pageLeft, doc.y, { width: contentWidth, align: 'center' });
 
       // Finalize PDF
       doc.end();
