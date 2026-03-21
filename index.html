@@ -464,6 +464,7 @@
             const [isDragging, setIsDragging] = useState(false);
             const [status, setStatus] = useState('idle'); // idle, uploading, analyzing, success, error
             const [analysis, setAnalysis] = useState(null);
+            const [analysisError, setAnalysisError] = useState('');
             const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent
             const [showBookingModal, setShowBookingModal] = useState(false);
             const [isPlayingVoice, setIsPlayingVoice] = useState(false);
@@ -508,6 +509,7 @@
                 const filesArr = Array.from(newFiles);
                 setFiles(prev => [...prev, ...filesArr]);
                 setAnalysis(null);
+                setAnalysisError('');
             };
 
             const fileToBase64 = (file) => {
@@ -530,6 +532,7 @@
                 }
 
                 setStatus('uploading');
+                setAnalysisError('');
                 
                 try {
                     await new Promise(r => setTimeout(r, 1000));
@@ -605,59 +608,23 @@
 
                     setAnalysis(analysisData);
                     setStatus('success');
+                    setAnalysisError('');
 
                 } catch (error) {
                     console.error("Upload/Analysis Error:", error);
                     if (error.message === "AI_UNAVAILABLE") {
-                        const mockData = {
-                            "summary": "Demo preview: Live AI analysis is temporarily unavailable, so this report shows a sample whole-body health summary for layout preview only. Please consult a licensed clinician for clinical interpretation.",
-                            "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
-                            "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
-                            "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
-                            "swot": {
-                                "strengths": ["Excellent neural connectivity", "No signs of structural atrophy", "Good vascular health"],
-                                "weaknesses": ["Minor signs of oxidative stress", "Vitamin D deficiency potential", "Eye strain indicators"],
-                                "opportunities": ["Preventative cognitive therapy", "Dietary optimization", "Supplementation regimen"],
-                                "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
-                            },
-                            "graph": [
-                                {"label": "Heart Health", "score": 86},
-                                {"label": "Lung Function", "score": 81},
-                                {"label": "Liver Health", "score": 83},
-                                {"label": "Kidney Health", "score": 79},
-                                {"label": "Metabolic Balance", "score": 77}
-                            ]
-                        };
-                        setAnalysis(mockData);
-                        setStatus('success');
+                        setAnalysis(null);
+                        setStatus('error');
+                        setAnalysisError('Live AI analysis is currently unavailable. Please try again shortly or contact support.');
                     } else
                     if (error.message === "QUOTA_EXCEEDED" || error.message.includes("quota") || error.message.includes("429")) {
-                        // Fallback to Mock Data
-                        const mockData = {
-                            "summary": "Demo preview: Live AI analysis is currently rate-limited, so this report shows a sample whole-body health summary for layout preview only. Please consult a licensed clinician for clinical interpretation.",
-                            "care": ["Maintain regular sleep schedule (7-8 hours)", "Stay hydrated (2-3 liters/day)", "Take short breaks during intense work"],
-                            "medicine": ["Multi-vitamin Complex - Once daily", "Omega-3 Fish Oil - 1000mg - Daily"],
-                            "lifestyle": ["Practice mindfulness meditation (10 mins/day)", "Limit caffeine intake after 2 PM", "Increase aerobic exercise"],
-                            "swot": {
-                                "strengths": ["Excellent neural connectivity", "No signs of structural atrophy", "Good vascular health"],
-                                "weaknesses": ["Minor signs of oxidative stress", "Vitamin D deficiency potential", "Eye strain indicators"],
-                                "opportunities": ["Preventative cognitive therapy", "Dietary optimization", "Supplementation regimen"],
-                                "threats": ["Long-term screen exposure risk", "Sedentary lifestyle impact", "Sleep deprivation"]
-                            },
-                            "graph": [
-                                {"label": "Heart Health", "score": 85},
-                                {"label": "Lung Function", "score": 80},
-                                {"label": "Liver Health", "score": 82},
-                                {"label": "Kidney Health", "score": 78},
-                                {"label": "Metabolic Balance", "score": 76}
-                            ]
-                        };
-                        alert("Note: API Quota Exceeded. Showing DEMO analysis results.");
-                        setAnalysis(mockData);
-                        setStatus('success');
-                    } else {
+                        setAnalysis(null);
                         setStatus('error');
-                        alert("Analysis failed: " + error.message);
+                        setAnalysisError('Live AI analysis is rate-limited right now. Please retry in a few minutes.');
+                    } else {
+                        setAnalysis(null);
+                        setStatus('error');
+                        setAnalysisError("Analysis failed: " + error.message);
                     }
                 }
             };
@@ -892,6 +859,9 @@
                                 <button type="submit" className="btn btn-primary btn-block" disabled={status === 'uploading' || status === 'analyzing'}>
                                     {status === 'uploading' ? "Uploading..." : status === 'analyzing' ? "Analyzing via Neuro-AI..." : "Analyze Report"}
                                 </button>
+                                {status === 'error' && analysisError && (
+                                    <p style={{marginTop: '12px', fontSize: '14px', color: '#dc2626', fontWeight: 600}}>{analysisError}</p>
+                                )}
                             </form>
 
                             {status === 'analyzing' && <SkeletonLoader />}
@@ -901,12 +871,12 @@
                                     <div className="result-header" style={{textAlign: 'center', marginBottom: '30px'}}>
                                         <h2 style={{color: 'var(--accent)'}}>Analysis Complete</h2>
                                         <p>{analysis.summary}</p>
-                                        <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
-                                            <button className={`voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
+                                        <div className="analysis-actions" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
+                                            <button className={`analysis-action-btn voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
                                                 <ion-icon name={isPlayingVoice ? "volume-high-outline" : "volume-medium-outline"}></ion-icon>
                                                 {isPlayingVoice ? "Stop Reading" : "Read Aloud"}
                                             </button>
-                                            <button className="btn nav-btn" onClick={handleEmailReport} style={{display: 'inline-flex', alignItems: 'center', gap: '8px'}}>
+                                            <button className="analysis-action-btn action-email-btn" onClick={handleEmailReport}>
                                                 {emailStatus === 'sending' ? (
                                                     <>Sending <ion-icon name="sync-outline" className="spin"></ion-icon></>
                                                 ) : emailStatus === 'sent' ? (
@@ -916,7 +886,7 @@
                                                 )}
                                             </button>
                                             {analysis.swot?.threats?.length > 0 && (
-                                                <button className="btn btn-primary" onClick={() => setShowBookingModal(true)} style={{display: 'inline-flex', alignItems: 'center', gap: '8px'}}>
+                                                <button className="analysis-action-btn action-consult-btn" onClick={() => setShowBookingModal(true)}>
                                                     Consult Doctor <ion-icon name="calendar-outline"></ion-icon>
                                                 </button>
                                             )}
@@ -1166,6 +1136,36 @@
             </footer>
         );
 
+        const ScrollTopButton = () => {
+            const [visible, setVisible] = useState(false);
+
+            useEffect(() => {
+                const onScroll = () => {
+                    setVisible(window.scrollY > 320);
+                };
+
+                window.addEventListener('scroll', onScroll, { passive: true });
+                onScroll();
+                return () => window.removeEventListener('scroll', onScroll);
+            }, []);
+
+            const scrollToTop = () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            return (
+                <button
+                    type="button"
+                    className={`scroll-top-btn ${visible ? 'show' : ''}`}
+                    onClick={scrollToTop}
+                    aria-label="Go to top"
+                    title="Go to top"
+                >
+                    <ion-icon name="arrow-up-outline"></ion-icon>
+                </button>
+            );
+        };
+
         const App = () => {
             const [isDark, setIsDark] = useState(false);
 
@@ -1203,6 +1203,7 @@
                     <UploadSection />
                     <ComplianceSection />
                     <Footer />
+                    <ScrollTopButton />
                 </React.Fragment>
             );
         };

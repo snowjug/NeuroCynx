@@ -867,9 +867,24 @@ footer {
 
 @media (max-width: 768px) {
     .stats-container { flex-direction: column; }
-    .process-steps { flex-direction: column; gap: 40px; }
+    .process-steps {
+        flex-direction: column;
+        gap: 28px;
+        align-items: center;
+    }
+    .process-step {
+        max-width: 100%;
+        width: min(100%, 360px);
+        margin: 0 auto;
+    }
     .process-line { display: none; }
     .step-icon-wrapper { width: 80px; height: 80px; font-size: 32px; }
+    .step-title { font-size: 18px; }
+    .step-desc {
+        font-size: 14px;
+        max-width: 32ch;
+        margin: 0 auto;
+    }
 }
 
 /* Scanner Animation in Drop Zone */
@@ -1224,6 +1239,9 @@ html:not([data-theme='dark']) .glass-panel {
     .health-graph canvas {
         max-width: 100%;
     }
+    .analysis-action-btn {
+        width: 100%;
+    }
 }
 
 
@@ -1303,6 +1321,21 @@ html:not([data-theme='dark']) .glass-panel {
     .badges-grid {
         grid-template-columns: 1fr;
     }
+    .badge-item {
+        padding: 16px;
+        gap: 12px;
+    }
+    .badge-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 28px;
+    }
+    .badge-item span {
+        font-size: 15px;
+    }
+    .badge-item small {
+        font-size: 13px;
+    }
 }
 
 .badge-item {
@@ -1367,6 +1400,7 @@ html:not([data-theme='dark']) .glass-panel {
     font-size: 17px;
     margin-bottom: 4px;
     line-height: 1.2;
+    overflow-wrap: anywhere;
 }
 
 .badge-item small {
@@ -1374,6 +1408,7 @@ html:not([data-theme='dark']) .glass-panel {
     color: var(--text-secondary);
     font-size: 14px;
     font-weight: 500;
+    overflow-wrap: anywhere;
 }
 
 /* Make grid responsive to prevent squashing */
@@ -1591,6 +1626,98 @@ html:not([data-theme='dark']) .glass-panel {
 .voice-btn.playing {
     animation: pulse 1.5s infinite;
 }
+
+.analysis-actions {
+    align-items: center;
+}
+
+.analysis-action-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.analysis-action-btn ion-icon {
+    font-size: 17px;
+}
+
+.analysis-action-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+    border-color: var(--accent);
+}
+
+.action-email-btn,
+.action-consult-btn {
+    background: var(--accent);
+    color: #fff;
+    border-color: transparent;
+}
+
+.action-email-btn:hover,
+.action-consult-btn:hover {
+    background: var(--accent-hover);
+    color: #fff;
+}
+
+.analysis-action-btn.voice-btn {
+    background: rgba(124, 58, 237, 0.1);
+    color: var(--accent);
+    border-color: rgba(124, 58, 237, 0.3);
+}
+
+.analysis-action-btn.voice-btn:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.scroll-top-btn {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 1200;
+}
+
+.scroll-top-btn.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.scroll-top-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-2px);
+}
+
 @keyframes pulse {
     0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4); }
     70% { box-shadow: 0 0 0 10px rgba(124, 58, 237, 0); }
