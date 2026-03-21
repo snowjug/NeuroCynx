@@ -1,6 +1,11 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const { createCanvas } = require('canvas');
+const { Resend } = require('resend');
+
+const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+const EMAIL_API_KEY = process.env.EMAIL_API_KEY || process.env.RESEND_API_KEY || '';
+const EMAIL_FROM = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com';
+const resend = EMAIL_PROVIDER === 'resend' && EMAIL_API_KEY ? new Resend(EMAIL_API_KEY) : null;
 
 const escapeHtml = (value = '') => {
   return String(value)
@@ -12,7 +17,33 @@ const escapeHtml = (value = '') => {
 };
 
 const isEmailConfigured = () => {
+  if (EMAIL_PROVIDER === 'resend') {
+    return Boolean(EMAIL_API_KEY && EMAIL_FROM && !EMAIL_API_KEY.startsWith('re_xxxxxxxxx'));
+  }
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS);
+};
+
+const sendViaResend = async ({ to, subject, html, pdfBuffer, filename }) => {
+  if (!resend) {
+    throw new Error('Resend is not initialized. Replace re_xxxxxxxxx with your real API key in EMAIL_API_KEY.');
+  }
+
+  const { error } = await resend.emails.send({
+    from: EMAIL_FROM,
+    to: [to],
+    subject,
+    html,
+    attachments: [
+      {
+        filename,
+        content: pdfBuffer.toString('base64')
+      }
+    ]
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Resend email request failed.');
+  }
 };
 
 const createTransporter = () => {
@@ -28,112 +59,69 @@ const createTransporter = () => {
   });
 };
 
-// Generate radar chart as image
-function generateRadarChart(graphData) {
+// Generate radar chart image using QuickChart (free, no API key required)
+async function generateRadarChart(graphData) {
   try {
-    const size = 400;
-    const canvas = createCanvas(size, size);
-    const ctx = canvas.getContext('2d');
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const maxRadius = 150;
-    const levels = 5;
+    const labels = Array.isArray(graphData) ? graphData.map((m) => String(m?.label || 'Metric')) : [];
+    const scores = Array.isArray(graphData)
+      ? graphData.map((m) => Math.max(0, Math.min(100, Number(m?.score) || 0)))
+      : [];
 
-    // Background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-
-    // Draw grid circles
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 1;
-    for (let i = 1; i <= levels; i++) {
-      const radius = (maxRadius / levels) * i;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.stroke();
+    if (labels.length === 0 || scores.length === 0) {
+      return null;
     }
 
-    // Draw axis lines and labels
-    const dataPoints = graphData && Array.isArray(graphData) ? graphData.length : 5;
-    const angleSlice = (Math.PI * 2) / dataPoints;
-
-    ctx.strokeStyle = '#d0d0d0';
-    ctx.lineWidth = 1;
-    ctx.font = 'bold 11px Arial';
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let i = 0; i < dataPoints; i++) {
-      const angle = angleSlice * i - Math.PI / 2;
-      const x1 = centerX + maxRadius * Math.cos(angle);
-      const y1 = centerY + maxRadius * Math.sin(angle);
-
-      // Axis line
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-
-      // Label
-      const labelRadius = maxRadius + 35;
-      const labelX = centerX + labelRadius * Math.cos(angle);
-      const labelY = centerY + labelRadius * Math.sin(angle);
-
-      if (graphData && graphData[i]) {
-        const label = String(graphData[i].label || '').substring(0, 12);
-        ctx.fillText(label, labelX, labelY);
-      }
-    }
-
-    // Draw data polygon
-    if (graphData && Array.isArray(graphData) && graphData.length > 0) {
-      ctx.fillStyle = 'rgba(124, 58, 237, 0.2)';
-      ctx.strokeStyle = '#7c3aed';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      for (let i = 0; i < graphData.length; i++) {
-        const angle = angleSlice * i - Math.PI / 2;
-        const score = Math.max(0, Math.min(100, Number(graphData[i].score) || 0));
-        const radius = (maxRadius / 100) * score;
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
-
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
+    const chartConfig = {
+      type: 'radar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Health Score',
+            data: scores,
+            borderColor: '#7c3aed',
+            backgroundColor: 'rgba(124, 58, 237, 0.20)',
+            pointBackgroundColor: '#7c3aed',
+            pointRadius: 4,
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          r: {
+            min: 0,
+            max: 100,
+            ticks: { stepSize: 20, backdropColor: 'transparent' },
+            grid: { color: '#e6e6eb' },
+            angleLines: { color: '#e6e6eb' },
+            pointLabels: { color: '#1a1a1a', font: { size: 12 } }
+          }
         }
       }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+    };
 
-      // Draw points
-      ctx.fillStyle = '#7c3aed';
-      for (let i = 0; i < graphData.length; i++) {
-        const angle = angleSlice * i - Math.PI / 2;
-        const score = Math.max(0, Math.min(100, Number(graphData[i].score) || 0));
-        const radius = (maxRadius / 100) * score;
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
+    const endpoint = `https://quickchart.io/chart?width=700&height=520&format=png&devicePixelRatio=2&backgroundColor=white&c=${encodeURIComponent(
+      JSON.stringify(chartConfig)
+    )}`;
 
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      return null;
     }
 
-    return canvas.toBuffer('image/png');
-  } catch (error) {
-    console.error('Chart generation error:', error);
+    const arr = await response.arrayBuffer();
+    return Buffer.from(arr);
+  } catch (_error) {
     return null;
   }
 }
 
 // Generate beautiful PDF report
 async function generatePDF(patientName, analysis) {
+  const chartBuffer = await generateRadarChart(analysis?.graph);
+
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
@@ -172,7 +160,6 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(1);
 
       // Health Radar Chart
-      const chartBuffer = generateRadarChart(analysis.graph);
       if (chartBuffer) {
         doc.fontSize(14).font('Helvetica-Bold').fillColor(textPrimary).text('Health Radar');
         doc.moveDown(0.5);
@@ -300,10 +287,14 @@ async function reportEmailHandler(req, res) {
 
   try {
     if (!isEmailConfigured()) {
+      const configHint = EMAIL_PROVIDER === 'resend'
+        ? 'Set EMAIL_PROVIDER=resend, EMAIL_FROM, and replace re_xxxxxxxxx in EMAIL_API_KEY with your real key.'
+        : 'Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS in .env.';
+
       return res.status(503).json({
         error: {
           code: 'EMAIL_NOT_CONFIGURED',
-          message: 'Email service is not configured. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS environment variables.'
+          message: `Email service is not configured. ${configHint}`
         }
       });
     }
@@ -333,30 +324,38 @@ async function reportEmailHandler(req, res) {
     // Generate PDF
     const pdfBuffer = await generatePDF(patientName, analysis);
 
+    const subject = 'Your NeuCyn Health Report';
+    const html = `
+      <div style="font-family:Arial, sans-serif;max-width:700px;margin:0 auto;color:#1f2937;">
+        <h2>Hello ${escapeHtml(patientName || 'Patient')},</h2>
+        <p>Your NeuCyn health analysis report is attached as a PDF. Please open it to view your complete health assessment including SWOT analysis and health metrics.</p>
+        <p style="color:#6b7280;font-size:12px;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:20px;">
+          This report is AI-assisted and should not replace a licensed clinician's diagnosis.
+          Always consult with healthcare professionals for medical advice.
+        </p>
+      </div>
+    `;
+    const filename = `NeuCyn_Report_${Date.now()}.pdf`;
+
     // Send email with PDF attachment
-    const transporter = createTransporter();
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com',
-      to: email,
-      subject: 'Your NeuCyn Health Report',
-      html: `
-        <div style="font-family:Arial, sans-serif;max-width:700px;margin:0 auto;color:#1f2937;">
-          <h2>Hello ${escapeHtml(patientName || 'Patient')},</h2>
-          <p>Your NeuCyn health analysis report is attached as a PDF. Please open it to view your complete health assessment including SWOT analysis and health metrics.</p>
-          <p style="color:#6b7280;font-size:12px;margin-top:20px;border-top:1px solid #e5e7eb;padding-top:20px;">
-            This report is AI-assisted and should not replace a licensed clinician's diagnosis. 
-            Always consult with healthcare professionals for medical advice.
-          </p>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: `NeuCyn_Report_${Date.now()}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf'
-        }
-      ]
-    });
+    if (EMAIL_PROVIDER === 'resend') {
+      await sendViaResend({ to: email, subject, html, pdfBuffer, filename });
+    } else {
+      const transporter = createTransporter();
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com',
+        to: email,
+        subject,
+        html,
+        attachments: [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          }
+        ]
+      });
+    }
 
     return res.status(200).json({ ok: true, message: 'Health report emailed successfully with PDF attachment.' });
   } catch (error) {
