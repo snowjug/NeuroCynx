@@ -347,20 +347,6 @@ async function generatePDF(patientName, analysis) {
         doc.moveDown(0.2);
       };
 
-      const drawBulletList = (items, { prefix = '•', color = textSecondary, maxItemLength = 160 } = {}) => {
-        if (!Array.isArray(items) || items.length === 0) {
-          doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('Not available', pageLeft, doc.y, { width: contentWidth });
-          doc.moveDown(0.4);
-          return;
-        }
-
-        items.forEach((item) => {
-          ensureSpace(18);
-          doc.font('Helvetica').fontSize(10).fillColor(color).text(`${prefix} ${String(item).substring(0, maxItemLength)}`, pageLeft + 2, doc.y, { width: contentWidth - 8 });
-        });
-        doc.moveDown(0.35);
-      };
-
       const drawHighlightCards = (metrics) => {
         if (!Array.isArray(metrics) || metrics.length === 0) {
           return;
@@ -467,19 +453,46 @@ async function generatePDF(patientName, analysis) {
       drawDivider();
       doc.moveDown(0.5);
 
-      // Chart
+      // Chart with legend
       drawSectionTitle('Health Radar');
       if (chartBuffer) {
-        ensureSpace(340);
-        const chartWidth = 320;
+        ensureSpace(420);
+        const chartWidth = 280;
         const chartX = pageLeft + (contentWidth - chartWidth) / 2;
         doc.image(chartBuffer, chartX, doc.y, { fit: [chartWidth, chartWidth], align: 'center' });
-        doc.y += chartWidth + 10;
+        doc.y += chartWidth + 12;
+
+        // Legend below chart
+        const metrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
+        if (metrics.length > 0) {
+          doc.font('Helvetica-Bold').fontSize(9).fillColor(textPrimary).text('Metric Scores:', pageLeft, doc.y);
+          doc.moveDown(0.25);
+          
+          const legendItemsPerRow = 2;
+          const legendColWidth = contentWidth / legendItemsPerRow;
+          let legendIndex = 0;
+          
+          for (let i = 0; i < Math.ceil(metrics.length / legendItemsPerRow); i++) {
+            const legendY = doc.y;
+            for (let j = 0; j < legendItemsPerRow && legendIndex < metrics.length; j++) {
+              const metric = metrics[legendIndex];
+              const score = Math.max(0, Math.min(100, Math.round(Number(metric?.score) || 0)));
+              const label = String(metric?.label || 'Metric').substring(0, 28);
+              const x = pageLeft + (j * legendColWidth);
+              
+              doc.font('Helvetica').fontSize(9).fillColor(textSecondary)
+                .text(`• ${label}: ${score}/100`, x + 2, legendY, { width: legendColWidth - 4 });
+              legendIndex++;
+            }
+            doc.moveDown(0.3);
+          }
+        }
       } else {
         doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('Radar chart could not be generated from provided data.', pageLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.3);
       }
 
+      doc.moveDown(0.2);
       drawDivider();
       doc.moveDown(0.6);
 
@@ -521,7 +534,7 @@ async function generatePDF(patientName, analysis) {
 
         const gap = 12;
         const cardWidth = (contentWidth - gap) / 2;
-        const cardHeight = 130;
+        const cardHeight = 160;
 
         for (let i = 0; i < swotSections.length; i += 2) {
           ensureSpace(cardHeight + 12);
@@ -535,15 +548,15 @@ async function generatePDF(patientName, analysis) {
 
             const x = pageLeft + (j * (cardWidth + gap));
             doc.roundedRect(x, rowY, cardWidth, cardHeight, 8).fill(section.bg).strokeColor('#dbe3ef').lineWidth(1).stroke();
-            doc.fillColor(section.color).font('Helvetica-Bold').fontSize(11).text(section.title, x + 10, rowY + 10, { width: cardWidth - 20 });
+            doc.fillColor(section.color).font('Helvetica-Bold').fontSize(12).text(section.title, x + 12, rowY + 12, { width: cardWidth - 24 });
 
             const lines = Array.isArray(section.items) && section.items.length > 0
-              ? section.items.slice(0, 3).map((item) => `• ${String(item).substring(0, 54)}`)
+              ? section.items.slice(0, 4).map((item) => `• ${String(item).substring(0, 52)}`)
               : ['• Not available'];
 
-            doc.fillColor(textSecondary).font('Helvetica').fontSize(9).text(lines.join('\n'), x + 10, rowY + 28, {
-              width: cardWidth - 20,
-              height: cardHeight - 36
+            doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(lines.join('\n'), x + 12, rowY + 34, {
+              width: cardWidth - 24,
+              height: cardHeight - 46
             });
           }
 
@@ -554,17 +567,71 @@ async function generatePDF(patientName, analysis) {
         doc.moveDown(0.6);
       }
 
-      // Recommendations
+      // Recommendations with professional card styling
       drawSectionTitle('Care Recommendations');
-      drawBulletList(analysis?.care, { maxItemLength: 180 });
+      const careItems = Array.isArray(analysis?.care) ? analysis.care : [];
+      if (careItems.length > 0) {
+        ensureSpace(110);
+        const careCardY = doc.y;
+        doc.roundedRect(pageLeft, careCardY, contentWidth, 100, 8).fill('#f0f9ff').strokeColor('#0284c7').lineWidth(1.5).stroke();
+        doc.fillColor('#0c4a6e').font('Helvetica-Bold').fontSize(11).text('Action Items & Monitoring', pageLeft + 12, careCardY + 10, { width: contentWidth - 24 });
+        
+        const careLines = careItems.slice(0, 3).map((item) => `• ${String(item).substring(0, 85)}`);
+        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(careLines.join('\n'), pageLeft + 12, careCardY + 30, {
+          width: contentWidth - 24,
+          height: 60
+        });
+        doc.y = careCardY + 105;
+      } else {
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No care recommendations available.', pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.4);
+      }
+
+      doc.moveDown(0.4);
 
       drawSectionTitle('Medication Guidance');
-      drawBulletList(analysis?.medicine, { prefix: 'Rx', maxItemLength: 180 });
-      doc.font('Helvetica-Oblique').fontSize(9).fillColor('#6b7280').text('Always consult a licensed physician before taking medications.', pageLeft, doc.y, { width: contentWidth });
-      doc.moveDown(0.5);
+      const medicineItems = Array.isArray(analysis?.medicine) ? analysis.medicine : [];
+      if (medicineItems.length > 0) {
+        ensureSpace(140);
+        const medicineCardY = doc.y;
+        doc.roundedRect(pageLeft, medicineCardY, contentWidth, 130, 8).fill('#fefce8').strokeColor('#ca8a04').lineWidth(1.5).stroke();
+        doc.fillColor('#78350f').font('Helvetica-Bold').fontSize(11).text('Prescribed Medications', pageLeft + 12, medicineCardY + 10, { width: contentWidth - 24 });
+        
+        const medicineLines = medicineItems.slice(0, 3).map((item) => `Rx  ${String(item).substring(0, 75)}`);
+        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(medicineLines.join('\n'), pageLeft + 12, medicineCardY + 30, {
+          width: contentWidth - 24,
+          height: 80
+        });
+        
+        doc.font('Helvetica-Oblique').fontSize(9).fillColor('#991b1b').text('Always consult a licensed physician before taking medications.', pageLeft + 12, medicineCardY + 115, { width: contentWidth - 24 });
+        doc.y = medicineCardY + 135;
+      } else {
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No medication guidance available.', pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.4);
+      }
+
+      doc.moveDown(0.4);
 
       drawSectionTitle('Lifestyle Recommendations');
-      drawBulletList(analysis?.lifestyle, { maxItemLength: 180 });
+      const lifestyleItems = Array.isArray(analysis?.lifestyle) ? analysis.lifestyle : [];
+      if (lifestyleItems.length > 0) {
+        ensureSpace(140);
+        const lifestyleCardY = doc.y;
+        doc.roundedRect(pageLeft, lifestyleCardY, contentWidth, 130, 8).fill('#f0fdf4').strokeColor('#16a34a').lineWidth(1.5).stroke();
+        doc.fillColor('#166534').font('Helvetica-Bold').fontSize(11).text('Wellness & Daily Habits', pageLeft + 12, lifestyleCardY + 10, { width: contentWidth - 24 });
+        
+        const lifestyleLines = lifestyleItems.slice(0, 5).map((item) => `• ${String(item).substring(0, 75)}`);
+        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(lifestyleLines.join('\n'), pageLeft + 12, lifestyleCardY + 30, {
+          width: contentWidth - 24,
+          height: 90
+        });
+        doc.y = lifestyleCardY + 135;
+      } else {
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No lifestyle recommendations available.', pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.4);
+      }
+
+      doc.moveDown(0.3);
 
       // Footer
       ensureSpace(60);
