@@ -3,10 +3,12 @@ const PDFDocument = require('pdfkit');
 const { createCanvas } = require('canvas');
 const { Resend } = require('resend');
 
-const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
-const EMAIL_API_KEY = process.env.EMAIL_API_KEY || process.env.RESEND_API_KEY || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com';
-const resend = EMAIL_PROVIDER === 'resend' && EMAIL_API_KEY ? new Resend(EMAIL_API_KEY) : null;
+const getEmailConfig = () => {
+  const provider = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
+  const apiKey = process.env.EMAIL_API_KEY || process.env.RESEND_API_KEY || '';
+  const from = process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@neucyn.com';
+  return { provider, apiKey, from };
+};
 
 const escapeHtml = (value = '') => {
   return String(value)
@@ -18,19 +20,23 @@ const escapeHtml = (value = '') => {
 };
 
 const isEmailConfigured = () => {
-  if (EMAIL_PROVIDER === 'resend') {
-    return Boolean(EMAIL_API_KEY && EMAIL_FROM && !EMAIL_API_KEY.startsWith('re_xxxxxxxxx'));
+  const { provider, apiKey, from } = getEmailConfig();
+  if (provider === 'resend') {
+    return Boolean(apiKey && from && !apiKey.startsWith('re_xxxxxxxxx'));
   }
   return Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS);
 };
 
 const sendViaResend = async ({ to, subject, html, pdfBuffer, filename }) => {
-  if (!resend) {
+  const { apiKey, from } = getEmailConfig();
+  if (!apiKey || apiKey.startsWith('re_xxxxxxxxx')) {
     throw new Error('Resend is not initialized. Replace re_xxxxxxxxx with your real API key in EMAIL_API_KEY.');
   }
 
+  const resend = new Resend(apiKey);
+
   const { error } = await resend.emails.send({
-    from: EMAIL_FROM,
+    from,
     to: [to],
     subject,
     html,
@@ -333,7 +339,8 @@ async function reportEmailHandler(req, res) {
 
   try {
     if (!isEmailConfigured()) {
-      const configHint = EMAIL_PROVIDER === 'resend'
+      const { provider } = getEmailConfig();
+      const configHint = provider === 'resend'
         ? 'Set EMAIL_PROVIDER=resend, EMAIL_FROM, and replace re_xxxxxxxxx in EMAIL_API_KEY with your real key.'
         : 'Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS in .env.';
 
@@ -384,7 +391,8 @@ async function reportEmailHandler(req, res) {
     const filename = `NeuCyn_Report_${Date.now()}.pdf`;
 
     // Send email with PDF attachment
-    if (EMAIL_PROVIDER === 'resend') {
+    const { provider } = getEmailConfig();
+    if (provider === 'resend') {
       await sendViaResend({ to: email, subject, html, pdfBuffer, filename });
     } else {
       const transporter = createTransporter();
