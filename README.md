@@ -66,6 +66,15 @@ The frontend uses React via CDN and the backend runs a lightweight Express serve
     ```
     Open `http://localhost:3000`.
 
+## ▲ Vercel Deployment Notes
+
+-   The project includes serverless API routes for Vercel under `api/`:
+    - `POST /api/gemini/generate`
+    - `POST /api/report/email`
+    - `GET /api/health`
+-   Set environment variables in Vercel Project Settings before deploying.
+-   After deploy, verify backend availability at `/api/health`.
+
 ## 🔐 Security Notes
 
 -   Gemini API calls now go through `POST /api/gemini/generate` on the backend.
