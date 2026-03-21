@@ -13,7 +13,7 @@ const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER || 'no-reply@neurocynx.com';
+const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER || 'no-reply@neucyn.com';
 
 app.use(express.json({ limit: '30mb' }));
 app.use(express.static(path.join(__dirname)));
@@ -51,7 +51,7 @@ const createTransporter = () => {
 };
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'NeuroCynx API' });
+  res.json({ ok: true, service: 'NeuCyn API' });
 });
 
 app.post('/api/gemini/generate', async (req, res) => {
@@ -169,7 +169,7 @@ app.post('/api/report/email', async (req, res) => {
 
     const html = `
       <div style="font-family:Arial, sans-serif;max-width:700px;margin:0 auto;color:#1f2937;line-height:1.5;">
-        <h2 style="margin-bottom:8px;">NeuroCynx Health Report</h2>
+        <h2 style="margin-bottom:8px;">NeuCyn Health Report</h2>
         <p style="margin-top:0;">Hello ${safeName}, your latest analysis summary is below.</p>
         <h3>Summary</h3>
         <p>${escapeHtml(analysis.summary || 'Not available')}</p>
@@ -202,7 +202,7 @@ app.post('/api/report/email', async (req, res) => {
     await transporter.sendMail({
       from: SMTP_FROM,
       to: email,
-      subject: 'Your NeuroCynx Health Report',
+      subject: 'Your NeuCyn Health Report',
       html
     });
 
@@ -222,5 +222,5 @@ app.get('*', (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`NeuroCynx server running on http://localhost:${PORT}`);
+  console.log(`NeuCyn server running on http://localhost:${PORT}`);
 });

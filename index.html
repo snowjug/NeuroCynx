@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neurocyn - Secure Consultation</title>
+    <title>NeuCyn - Secure Consultation</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="styles.css?v=3">
     <!-- React CDNs -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -78,7 +79,7 @@
                     <div className="nav-content">
                         <a href="#" className="nav-logo">
                             <ion-icon name="analytics-outline" style={{color: 'var(--accent)', fontSize: '24px'}}></ion-icon>
-                            <span>Neuro<span style={{color: 'var(--accent)'}}>cyn</span></span>
+                            <span>Neu<span style={{color: 'var(--accent)'}}>Cyn</span></span>
                         </a>
                         <div className={`nav-links ${mobileMenu ? 'active' : ''}`} style={mobileMenu ? {
                             display: 'flex', flexDirection: 'column', position: 'absolute', top: '70px', left: '0', width: '100%',
@@ -336,7 +337,7 @@
         );
 
         const Chatbot = ({ contextData }) => {
-            const [messages, setMessages] = useState([{ role: 'ai', text: 'Hello! I am your NeuroCynx AI assistant. Do you have any questions about your report?' }]);
+            const [messages, setMessages] = useState([{ role: 'ai', text: 'Hello! I am your NeuCyn AI assistant. Do you have any questions about your report?' }]);
             const [input, setInput] = useState('');
             const [isTyping, setIsTyping] = useState(false);
             const messagesEndRef = useRef(null);
@@ -1161,7 +1162,7 @@
         const Footer = () => (
             <footer id="contact">
                 <div className="container footer-content">
-                    <div>© 2026 Neurocyn. All rights reserved.</div>
+                    <div>© 2026 NeuCyn. All rights reserved.</div>
                     <div className="footer-links"><a href="#">Privacy</a><a href="#">Terms</a></div>
                 </div>
             </footer>
