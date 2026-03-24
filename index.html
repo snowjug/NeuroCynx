@@ -534,6 +534,7 @@
             const [patientName, setPatientName] = useState('');
             const [patientEmail, setPatientEmail] = useState('');
             const [patientAge, setPatientAge] = useState('');
+            const [patientWeight, setPatientWeight] = useState('');
             const [patientGender, setPatientGender] = useState('unspecified');
             const [clinicalStrictness, setClinicalStrictness] = useState('strict');
             const fileInputRef = useRef(null);
@@ -1047,6 +1048,141 @@
                 return 'general';
             };
 
+            const THERAPEUTIC_INTERCHANGES = [
+                { aliases: ['crocin', 'calpol', 'dolo', 'metacin', 'tylenol'], generic: 'Paracetamol', activeIngredient: 'Acetaminophen', note: 'Lower-cost generic variants are widely available in most regions.' },
+                { aliases: ['brufen', 'advil', 'motrin'], generic: 'Ibuprofen', activeIngredient: 'Ibuprofen', note: 'Common over-the-counter generic options are usually cheaper.' },
+                { aliases: ['combiflam'], generic: 'Ibuprofen + Paracetamol', activeIngredient: 'Ibuprofen + Acetaminophen', note: 'Equivalent generics with the same dual active ingredients are commonly available.' },
+                { aliases: ['augmentin'], generic: 'Amoxicillin + Clavulanate', activeIngredient: 'Amoxicillin + Clavulanic acid', note: 'Generic combinations may reduce cost while preserving therapeutic intent.' },
+                { aliases: ['ecosprin'], generic: 'Aspirin', activeIngredient: 'Acetylsalicylic acid', note: 'Generic antiplatelet alternatives are often available at lower cost.' }
+            ];
+
+            const extractMedicineName = (rawText) => {
+                const raw = String(rawText || '').trim();
+                if (!raw) return 'Medication';
+                const firstSegment = raw.split('-')[0].trim();
+                return firstSegment || raw;
+            };
+
+            const getReferenceDoseRangePerDoseMg = ({ medicineClass, age, weightKg, strictness }) => {
+                const hasAge = Number.isFinite(age) && age > 0;
+                const hasWeight = Number.isFinite(weightKg) && weightKg > 0;
+                const isPediatric = hasAge && age <= 17;
+                const isGeriatric = hasAge && age >= 65;
+
+                if (isPediatric && hasWeight) {
+                    const weightBasedRanges = {
+                        paracetamol: [10, 15],
+                        nsaid: [5, 10],
+                        antibiotic: [10, 20],
+                        steroid: [0.1, 0.5],
+                        opioid: [0.05, 0.2],
+                        anticoagulant: [0.05, 0.2],
+                        general: [5, 10]
+                    };
+                    const perKg = weightBasedRanges[medicineClass] || weightBasedRanges.general;
+                    return {
+                        min: Math.max(1, Math.round(perKg[0] * weightKg)),
+                        max: Math.max(1, Math.round(perKg[1] * weightKg))
+                    };
+                }
+
+                const adultRanges = {
+                    paracetamol: [250, 500],
+                    nsaid: [200, 400],
+                    antibiotic: [250, 500],
+                    steroid: [5, 20],
+                    opioid: [5, 10],
+                    anticoagulant: [2, 10],
+                    general: [100, 500]
+                };
+
+                const selectedRange = adultRanges[medicineClass] || adultRanges.general;
+                let min = selectedRange[0];
+                let max = selectedRange[1];
+
+                const strictnessFactor = strictness === 'conservative' ? 0.85 : strictness === 'strict' ? 0.92 : 1;
+                min *= strictnessFactor;
+                max *= strictnessFactor;
+
+                if (isGeriatric) {
+                    min *= 0.85;
+                    max *= 0.8;
+                }
+
+                return {
+                    min: Math.max(1, Math.round(min)),
+                    max: Math.max(1, Math.round(max))
+                };
+            };
+
+            const getTherapeuticInterchange = (rawMedicine) => {
+                const lower = String(rawMedicine || '').toLowerCase();
+                const medicineName = extractMedicineName(rawMedicine);
+
+                const matched = THERAPEUTIC_INTERCHANGES.find((entry) =>
+                    entry.aliases.some((alias) => lower.includes(alias))
+                );
+
+                if (!matched) {
+                    return null;
+                }
+
+                return {
+                    medicine: medicineName,
+                    message: `Opportunity: A generic version of this medication is available at a lower cost. Therapeutic Interchange: Consider ${matched.generic} (same active molecular ingredient: ${matched.activeIngredient}). ${matched.note}`
+                };
+            };
+
+            const buildReferenceBasedVerification = (verification, strictnessProfile) => {
+                const age = verification?.age;
+                const weightKg = verification?.weightKg;
+                const strictness = strictnessProfile || 'strict';
+
+                const dosageRecommendations = (verification?.items || []).map((item) => {
+                    const prescribedDose = item?.parsed?.doseMg;
+                    const range = getReferenceDoseRangePerDoseMg({
+                        medicineClass: item.medicineClass,
+                        age,
+                        weightKg,
+                        strictness
+                    });
+
+                    if (!Number.isFinite(prescribedDose)) {
+                        return {
+                            medicine: extractMedicineName(item.medicine),
+                            severityIndex: null,
+                            message: `Threat: Dose cannot be verified for ${extractMedicineName(item.medicine)} because the prescription text does not contain a clear mg value.`
+                        };
+                    }
+
+                    const sIdx = range.max > 0 ? prescribedDose / range.max : null;
+                    const sIdxRounded = Number.isFinite(sIdx) ? Number(sIdx.toFixed(2)) : null;
+                    const ageLabel = Number.isFinite(age) ? age : 'N/A';
+                    const weightLabel = Number.isFinite(weightKg) ? `${weightKg}kg` : 'N/A';
+
+                    const message = sIdxRounded !== null && sIdxRounded > 1
+                        ? `Threat: Based on standard FDA/Clinical guidelines for a patient of your age (${ageLabel}) and weight (${weightLabel}), the typical dosage range is ${range.min}mg-${range.max}mg. Your prescription of ${prescribedDose}mg exceeds this range ($S_{idx} = ${sIdxRounded}$).`
+                        : `Reference: Based on standard FDA/Clinical guidelines for age (${ageLabel}) and weight (${weightLabel}), the typical dosage range for ${extractMedicineName(item.medicine)} is ${range.min}mg-${range.max}mg. Your prescribed dose is ${prescribedDose}mg${sIdxRounded !== null ? ` ($S_{idx} = ${sIdxRounded}$)` : ''}.`;
+
+                    return {
+                        medicine: extractMedicineName(item.medicine),
+                        severityIndex: sIdxRounded,
+                        message
+                    };
+                });
+
+                const alternates = (verification?.items || [])
+                    .map((item) => getTherapeuticInterchange(item.medicine))
+                    .filter(Boolean)
+                    .filter((entry, index, all) => all.findIndex((candidate) => candidate.medicine === entry.medicine) === index);
+
+                return {
+                    dosageRecommendations,
+                    alternates,
+                    safetyProtocol: 'NeuCyn provides information for educational purposes only. Always consult a licensed physician before changing dosage or medication.'
+                };
+            };
+
             const getDoseCeilingMgPerDay = ({ medicineClass, age, strictness }) => {
                 const isPediatric = Number.isFinite(age) && age <= 12;
                 const isGeriatric = Number.isFinite(age) && age >= 65;
@@ -1101,10 +1237,12 @@
                 return notes.slice(0, 3);
             };
 
-            const buildDosageVerification = (medicineItems, ageInput, genderInput, strictnessInput) => {
+            const buildDosageVerification = (medicineItems, ageInput, weightInput, genderInput, strictnessInput) => {
                 const meds = Array.isArray(medicineItems) ? medicineItems.filter(Boolean) : [];
                 const age = Number(ageInput);
                 const hasAge = Number.isFinite(age) && age > 0;
+                const weightKg = Number(weightInput);
+                const hasWeight = Number.isFinite(weightKg) && weightKg > 0;
                 const gender = String(genderInput || 'unspecified').toLowerCase();
                 const normalizedGender = ['male', 'female', 'other'].includes(gender) ? gender : 'unspecified';
                 const strictnessConfig = getStrictnessConfig(strictnessInput);
@@ -1112,6 +1250,7 @@
                 if (!meds.length) {
                     return {
                         age: hasAge ? age : null,
+                        weightKg: hasWeight ? weightKg : null,
                         gender: normalizedGender,
                         strictnessProfile: strictnessConfig.profile,
                         overallRiskScore: 18,
@@ -1258,6 +1397,7 @@
 
                 return {
                     age: hasAge ? age : null,
+                    weightKg: hasWeight ? weightKg : null,
                     gender: normalizedGender,
                     strictnessProfile: strictnessConfig.profile,
                     overallRiskScore,
@@ -1328,7 +1468,8 @@
             const sortedMetrics = [...healthGraphData].sort((a, b) => b.score - a.score);
             const topStrength = sortedMetrics[0];
             const focusArea = sortedMetrics[sortedMetrics.length - 1];
-            const dosageVerification = buildDosageVerification(analysis?.medicine, patientAge, patientGender, clinicalStrictness);
+            const dosageVerification = buildDosageVerification(analysis?.medicine, patientAge, patientWeight, patientGender, clinicalStrictness);
+            const referenceBasedVerification = buildReferenceBasedVerification(dosageVerification, clinicalStrictness);
             const dosageThresholds = getStrictnessConfig(clinicalStrictness).thresholds;
             const dosageRiskMeta = getRiskLabelMeta(dosageVerification.overallRiskScore, dosageThresholds);
 
@@ -1336,6 +1477,7 @@
                 return {
                     patientName: patientName.trim() || 'Patient',
                     patientAge: Number.isFinite(Number(patientAge)) ? Number(patientAge) : null,
+                    patientWeight: Number.isFinite(Number(patientWeight)) ? Number(patientWeight) : null,
                     patientGender,
                     clinicalStrictness,
                     analysis: {
@@ -1475,6 +1617,17 @@
                                             placeholder="35"
                                             value={patientAge}
                                             onChange={(e) => setPatientAge(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Weight (kg)</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="300"
+                                            placeholder="70"
+                                            value={patientWeight}
+                                            onChange={(e) => setPatientWeight(e.target.value)}
                                         />
                                     </div>
                                     <div className="input-group">
@@ -1675,6 +1828,9 @@
                                                     Age: {dosageVerification.age ?? 'Not Provided'}
                                                 </div>
                                                 <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
+                                                    Weight: {dosageVerification.weightKg ?? 'Not Provided'} {dosageVerification.weightKg ? 'kg' : ''}
+                                                </div>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
                                                     Gender: {toTitleCase(dosageVerification.gender)}
                                                 </div>
                                                 <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
@@ -1729,6 +1885,31 @@
                                                 <p style={{marginTop: '10px', color: 'var(--text-secondary)', fontSize: '14px'}}>No medicine dosage entries available for verification.</p>
                                             )}
                                             <p style={{marginTop: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600}}>Dosage verification is assistive only and must be reviewed by a licensed clinician before treatment decisions.</p>
+                                        </div>
+
+                                        <div className="result-card" style={{gridColumn: '1 / -1'}}>
+                                            <h3><ion-icon name="book-outline"></ion-icon> Reference-Based Verification</h3>
+                                            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px', marginBottom: '12px'}}>
+                                                <div style={{background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '12px', padding: '12px'}}>
+                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#991b1b'}}>Threats: Dosage Recommendations</h4>
+                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
+                                                        {referenceBasedVerification.dosageRecommendations.length > 0
+                                                            ? referenceBasedVerification.dosageRecommendations.map((entry, idx) => <li key={idx}>{entry.message}</li>)
+                                                            : <li>Threat: No dosage recommendation can be generated without medicine dosage details.</li>}
+                                                    </ul>
+                                                </div>
+                                                <div style={{background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '12px', padding: '12px'}}>
+                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#065f46'}}>Alternates: Therapeutic Interchanges</h4>
+                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
+                                                        {referenceBasedVerification.alternates.length > 0
+                                                            ? referenceBasedVerification.alternates.map((entry, idx) => <li key={idx}>{entry.message}</li>)
+                                                            : <li>Opportunity: No direct therapeutic interchange identified from the current medicine list.</li>}
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                            <p style={{margin: 0, fontSize: '12px', color: '#92400e', fontWeight: 700}}>
+                                                Safety Protocol: {referenceBasedVerification.safetyProtocol}
+                                            </p>
                                         </div>
 
                                         <div className="result-card">
