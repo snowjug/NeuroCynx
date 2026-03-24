@@ -3,7 +3,7 @@
 ## What Changed?
 Your NeuroCynx app now generates **beautiful PDF reports** with:
 - ✅ SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats)
-- ✅ Health Radar Spider Chart (visual health metrics)
+- ✅ Metrics Overview table (visual health score breakdown)
 - ✅ Patient information and summary
 - ✅ Care recommendations, medications, lifestyle tips
 - ✅ Professional PDF formatting
@@ -113,7 +113,7 @@ npm install canvas --build-from-source
 
 1. **Header** - NeuCyn branding + patient name + date
 2. **Summary** - AI-generated health assessment
-3. **Health Radar** - Visual spider chart of 5 health metrics
+3. **Metrics Overview** - Tabular view of 5 health metrics and scores
 4. **Metrics Table** - Detailed scores for each health metric
 5. **SWOT Analysis** - Color-coded sections
    - 🟢 Strengths (green)

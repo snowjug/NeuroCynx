@@ -1,6 +1,5 @@
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const { createCanvas } = require('canvas');
 const { Resend } = require('resend');
 
 const sanitizeSender = (value = '') => String(value).replaceAll(/[\r\n\t]+/g, ' ').trim();
@@ -280,110 +279,8 @@ const createTransporter = () => {
   });
 };
 
-// Generate radar chart image locally using canvas
-async function generateRadarChart(graphData) {
-  try {
-    const points = Array.isArray(graphData) ? graphData : [];
-    if (!points.length) {
-      return null;
-    }
-
-    const size = 600;
-    const canvas = createCanvas(size, size);
-    const ctx = canvas.getContext('2d');
-
-    const centerX = size / 2;
-    const centerY = size / 2;
-    const maxRadius = 200;
-    const levels = 5;
-    const angleSlice = (Math.PI * 2) / points.length;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-
-    const plotPoints = points.map((item, i) => {
-      const angle = angleSlice * i - Math.PI / 2;
-      const score = Math.max(0, Math.min(100, Number(item?.score) || 0));
-      const radius = (maxRadius * score) / 100;
-      return {
-        label: String(item?.label || `Metric ${i + 1}`),
-        score,
-        angle,
-        x: centerX + radius * Math.cos(angle),
-        y: centerY + radius * Math.sin(angle)
-      };
-    });
-
-    for (let level = 1; level <= levels; level++) {
-      const radius = (maxRadius / levels) * level;
-      ctx.beginPath();
-      for (let i = 0; i < points.length; i++) {
-        const angle = angleSlice * i - Math.PI / 2;
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.closePath();
-      ctx.strokeStyle = '#e6e6eb';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-    }
-
-    for (let i = 0; i < points.length; i++) {
-      const angle = angleSlice * i - Math.PI / 2;
-      const x = centerX + maxRadius * Math.cos(angle);
-      const y = centerY + maxRadius * Math.sin(angle);
-
-      ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(x, y);
-      ctx.strokeStyle = '#d1d5db';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    ctx.beginPath();
-    for (let i = 0; i < plotPoints.length; i++) {
-      const { x, y } = plotPoints[i];
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(124, 58, 237, 0.22)';
-    ctx.strokeStyle = '#7c3aed';
-    ctx.lineWidth = 3;
-    ctx.fill();
-    ctx.stroke();
-
-    for (const point of plotPoints) {
-      const { x, y } = point;
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#7c3aed';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    return canvas.toBuffer('image/png');
-  } catch (error) {
-    console.error('Canvas chart generation failed:', error?.message || error);
-    return null;
-  }
-}
-
 // Generate beautiful PDF report
 async function generatePDF(patientName, analysis) {
-  const chartBuffer = await generateRadarChart(analysis?.graph);
   const insights = getReportInsights(analysis?.graph);
   const dosageInsights = normalizeDosageVerification(analysis?.dosageVerification, analysis?.medicine);
 
@@ -541,49 +438,6 @@ async function generatePDF(patientName, analysis) {
       drawDivider();
       doc.moveDown(0.5);
 
-      // Chart with legend
-      const radarMetrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
-      const radarLegendRows = Math.ceil(radarMetrics.length / 2);
-      const radarSectionHeight = chartBuffer ? (28 + 220 + 20 + (radarLegendRows * 14)) : 72;
-      ensureSpace(radarSectionHeight + 8);
-      drawSectionTitle('Health Radar');
-      if (chartBuffer) {
-        const chartWidth = 220;
-        const chartX = pageLeft + (contentWidth - chartWidth) / 2;
-        doc.image(chartBuffer, chartX, doc.y, { fit: [chartWidth, chartWidth], align: 'center' });
-        doc.y += chartWidth + 8;
-
-        // Legend below chart - compact format
-        if (radarMetrics.length > 0) {
-          doc.moveDown(0.2);
-          const legendItemsPerRow = 2;
-          const legendColWidth = contentWidth / legendItemsPerRow;
-          let legendIndex = 0;
-          
-          for (let i = 0; i < Math.ceil(radarMetrics.length / legendItemsPerRow); i++) {
-            const legendY = doc.y;
-            for (let j = 0; j < legendItemsPerRow && legendIndex < radarMetrics.length; j++) {
-              const metric = radarMetrics[legendIndex];
-              const score = Math.max(0, Math.min(100, Math.round(Number(metric?.score) || 0)));
-              const label = String(metric?.label || 'Metric').substring(0, 24);
-              const x = pageLeft + (j * legendColWidth);
-              
-              doc.font('Helvetica').fontSize(8.5).fillColor(textSecondary)
-                .text(`${label}: ${score}`, x + 2, legendY, { width: legendColWidth - 4 });
-              legendIndex++;
-            }
-            doc.moveDown(0.25);
-          }
-        }
-      } else {
-        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('Radar chart could not be generated from provided data.', pageLeft, doc.y, { width: contentWidth });
-        doc.moveDown(0.3);
-      }
-
-      doc.moveDown(0.2);
-      drawDivider();
-      doc.moveDown(0.6);
-
       // Metrics table - keep together on same page
       const metrics = Array.isArray(analysis?.graph) ? analysis.graph : [];
       const metricsTableHeight = 34 + (metrics.length * 24);
@@ -652,7 +506,7 @@ async function generatePDF(patientName, analysis) {
             let cursorY = textY;
             doc.fillColor(textSecondary).font('Helvetica').fontSize(10);
             for (const rawItem of items) {
-              const itemText = `• ${String(rawItem).substring(0, 64)}`;
+              const itemText = `• ${String(rawItem).substring(0, 140)}`;
               const itemHeight = doc.heightOfString(itemText, { width: textWidth, align: 'left' });
               if (cursorY + itemHeight > textBottom) {
                 doc.text('• ...', textX, cursorY, { width: textWidth, align: 'left' });

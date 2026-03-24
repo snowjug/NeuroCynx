@@ -17,7 +17,7 @@
     <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
     <!-- Marked.js for Markdown Rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Chart.js for Data Visualization -->
+    <!-- Chart.js for UI Health Radar -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .fade-up { opacity: 0; transform: translateY(20px); transition: opacity 0.8s, transform 0.8s; }
@@ -481,14 +481,12 @@
             const fileInputRef = useRef(null);
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
-            
-            // Listen for theme changes to update chart
+
             const [isDarkTheme, setIsDarkTheme] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
-            
             useEffect(() => {
                 const observer = new MutationObserver((mutations) => {
                     mutations.forEach((mutation) => {
-                        if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
                             setIsDarkTheme(document.documentElement.getAttribute('data-theme') === 'dark');
                         }
                     });
@@ -608,6 +606,10 @@
                         Ensure 'graph' has exactly 5 metrics with scores 0-100 for these labels only:
                         Heart Health, Lung Function, Liver Health, Kidney Health, Metabolic Balance.
                         Scores should be age-adjusted where age clues exist.
+                        IMPORTANT SWOT QUALITY RULE:
+                        - Each SWOT item must be a clear point in 8-20 words.
+                        - Do not use one-word or two-word fragments.
+                        - Keep each item actionable and clinically meaningful.
                         If the uploaded file is not a medical report (for example food, scenery, random selfie, etc), return:
                         reportValidity.isMedicalReport=false, a clear reason, and keep other fields empty arrays/blank values.
                         Return ONLY the JSON object. No markdown.
@@ -739,30 +741,29 @@
                     setTimeout(() => {
                         const results = document.querySelector('.analysis-results');
                         if (results) results.classList.add('visible');
-                        
-                        // Initialize Chart.js with Improved Visuals
-                        if (chartRef.current && healthGraphData.length) {
+
+                        if (chartRef.current && healthGraphData.length && typeof Chart !== 'undefined') {
                             if (chartInstance.current) {
                                 chartInstance.current.destroy();
                             }
+
                             const ctx = chartRef.current.getContext('2d');
                             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
                             const textColor = isDark ? '#f5f5f7' : '#1a1a1a';
                             const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
                             const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
 
-                            // Gradient for the chart area
                             const gradient = ctx.createRadialGradient(150, 150, 0, 150, 150, 150);
                             gradient.addColorStop(0, isDark ? 'rgba(124, 58, 237, 0.5)' : 'rgba(124, 58, 237, 0.3)');
                             gradient.addColorStop(1, isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)');
-                            
+
                             chartInstance.current = new Chart(ctx, {
                                 type: 'radar',
                                 data: {
-                                    labels: healthGraphData.map(g => g.label.length > 14 ? g.label.split(' ') : g.label),
+                                    labels: healthGraphData.map((g) => g.label.length > 14 ? g.label.split(' ') : g.label),
                                     datasets: [{
                                         label: 'Health Score',
-                                        data: healthGraphData.map(g => g.score),
+                                        data: healthGraphData.map((g) => g.score),
                                         backgroundColor: gradient,
                                         borderColor: accentColor,
                                         borderWidth: 3,
@@ -780,30 +781,19 @@
                                     maintainAspectRatio: false,
                                     scales: {
                                         r: {
-                                            angleLines: { 
-                                                display: true,
-                                                color: gridColor,
-                                                lineWidth: 1
-                                            },
-                                            grid: { 
-                                                color: gridColor,
-                                                circular: true, // Make grid circular for a cleaner look
-                                                lineWidth: 1
-                                            },
-                                            pointLabels: { 
-                                                color: textColor, 
+                                            angleLines: { display: true, color: gridColor, lineWidth: 1 },
+                                            grid: { color: gridColor, circular: true, lineWidth: 1 },
+                                            pointLabels: {
+                                                color: textColor,
                                                 font: { family: 'Inter', size: 11, weight: '600' },
                                                 padding: 10
                                             },
-                                            ticks: { 
+                                            ticks: {
                                                 display: false,
                                                 backdropColor: 'transparent',
-                                                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
-                                                font: { size: 10 },
                                                 stepSize: 20,
-                                                min: 0, 
-                                                max: 100,
-                                                z: 1 // Ensure ticks are above grid
+                                                min: 0,
+                                                max: 100
                                             }
                                         }
                                     },
@@ -823,8 +813,8 @@
                                             }
                                         }
                                     },
-                                    animation: {    
-                                        duration: 2000,
+                                    animation: {
+                                        duration: 1600,
                                         easing: 'easeOutQuart'
                                     }
                                 }
@@ -832,7 +822,14 @@
                         }
                     }, 100);
                 }
-            }, [analysis, isDarkTheme]); // Re-render when theme or analysis changes
+
+                return () => {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                        chartInstance.current = null;
+                    }
+                };
+            }, [analysis, isDarkTheme]);
 
             const speakText = (text) => {
                 if ('speechSynthesis' in window) {
@@ -1509,9 +1506,7 @@
 
                                     <div className="result-grid">
                                         <div className="result-card" style={{gridColumn: '1 / -1', minHeight: '400px', position: 'relative', overflow: 'hidden'}}>
-                                            {/* Dynamic Spider Web Background */}
                                             <NeuralBackground type="molecular" />
-                                            
                                             <div className="metric-card-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px', position: 'relative', zIndex: 2}}>
                                                 <h3 style={{marginBottom: 0, flex: '1 1 280px', minWidth: 0}}><ion-icon name="pulse-outline" style={{color: 'var(--accent)'}}></ion-icon> Overall Health Radar</h3>
                                                 <div className="metric-score-pill" style={{fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-card)', padding: '4px 12px', borderRadius: '20px', border: '1px solid var(--border)', maxWidth: '100%'}}>

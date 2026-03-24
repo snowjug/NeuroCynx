@@ -24,7 +24,7 @@ NeuroCynx is designed to make report review fast, private, and actionable:
 
 - Modern React interface (CDN-based, zero frontend build step).
 - Dark/light theme support.
-- Interactive health radar chart with Chart.js.
+- Metrics overview table with normalized health scores.
 - AI follow-up chatbot for report Q&A.
 - Professional report emails with branded HTML template.
 - Server-side validation and fallback model strategy for Gemini.
@@ -36,7 +36,7 @@ NeuroCynx is designed to make report review fast, private, and actionable:
 - AI: Google Gemini API (server proxy + fallback models).
 - PDF: PDFKit + Canvas.
 - Email: Resend API or SMTP via Nodemailer.
-- UI assets: Ionicons, Marked.js, Chart.js.
+- UI assets: Ionicons, Marked.js.
 
 ## Project Structure
 
