@@ -681,7 +681,19 @@
                     const contents = [];
                     
                     const prompt = `
-                        You are an expert general physician. Analyze the provided medical report(s). 
+                        You are acting as a Senior Doctor Consultant with multidisciplinary expertise in internal medicine, surgery, diagnostics, and preventive care, with 30+ years of clinical experience.
+                        
+                        PRIMARY GOAL:
+                        - Deliver the highest clinical reliability from the uploaded report(s).
+                        - Use only evidence present in the report(s). Do not invent values, diagnoses, or medicines.
+                        - If a field is uncertain, ambiguous, or missing, state that explicitly in professional wording.
+
+                        CLINICAL REASONING RULES:
+                        - Prioritize objective findings (labs, imaging, vitals, medication lines, impressions).
+                        - Avoid over-diagnosis. Use cautious medical language when certainty is limited.
+                        - Keep recommendations safe, conservative, and guideline-aligned.
+                        - If key context is missing (age/units/ranges), mention limitation in summary or SWOT items.
+                        
                         Generate a comprehensive whole-body health assessment in this strict JSON format:
                         {
                             "reportValidity": {
@@ -702,15 +714,19 @@
                                 {"label": "Metric Name", "score": 80}
                             ]
                         }
+
                         Ensure 'graph' has exactly 5 metrics with scores 0-100 for these labels only:
                         Heart Health, Lung Function, Liver Health, Kidney Health, Metabolic Balance.
-                        Scores should be age-adjusted where age clues exist.
+                        Scores should be age-adjusted where age clues exist. If no evidence supports a metric, estimate conservatively.
+
                         IMPORTANT SWOT QUALITY RULE:
                         - Each SWOT item must be a clear point in 8-20 words.
                         - Do not use one-word or two-word fragments.
                         - Keep each item actionable and clinically meaningful.
+
                         If the uploaded file is not a medical report (for example food, scenery, random selfie, etc), return:
                         reportValidity.isMedicalReport=false, a clear reason, and keep other fields empty arrays/blank values.
+
                         Return ONLY the JSON object. No markdown.
                         IMPORTANT: Return the entire response in English.
                     `;
