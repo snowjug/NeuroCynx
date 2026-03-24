@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const reportEmailHandler = require('./api/report/email');
+const medicineCompareHandler = require('./api/medicine/compare');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -88,6 +89,7 @@ app.post('/api/gemini/generate', async (req, res) => {
 });
 
 app.post('/api/report/email', reportEmailHandler);
+app.post('/api/medicine/compare', medicineCompareHandler);
 
 app.post('/api/report/pdf', async (req, res) => {
   try {

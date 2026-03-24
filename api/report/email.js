@@ -155,6 +155,34 @@ const normalizeDosageVerification = (rawDosage, medicineItems) => {
   };
 };
 
+const normalizeReferenceBasedVerification = (rawReference) => {
+  const dosageRecommendations = Array.isArray(rawReference?.dosageRecommendations)
+    ? rawReference.dosageRecommendations
+      .slice(0, 6)
+      .map((entry) => toPlainText(entry?.message || entry))
+      .filter(Boolean)
+    : [];
+
+  const alternates = Array.isArray(rawReference?.alternates)
+    ? rawReference.alternates
+      .slice(0, 6)
+      .map((entry) => {
+        const message = toPlainText(entry?.message || entry);
+        const source = toPlainText(entry?.source || '');
+        return source ? `${message} (${source})` : message;
+      })
+      .filter(Boolean)
+    : [];
+
+  const safetyProtocol = toPlainText(rawReference?.safetyProtocol || 'NeuCyn provides information for educational purposes only. Always consult a licensed physician before changing dosage or medication.');
+
+  return {
+    dosageRecommendations,
+    alternates,
+    safetyProtocol
+  };
+};
+
 const buildResendTemplateHtml = ({
   patientName,
   reportId,
@@ -283,6 +311,7 @@ const createTransporter = () => {
 async function generatePDF(patientName, analysis) {
   const insights = getReportInsights(analysis?.graph);
   const dosageInsights = normalizeDosageVerification(analysis?.dosageVerification, analysis?.medicine);
+  const referenceInsights = normalizeReferenceBasedVerification(analysis?.referenceBasedVerification);
 
   return new Promise((resolve, reject) => {
     try {
@@ -607,6 +636,40 @@ async function generatePDF(patientName, analysis) {
 
       doc.fillColor('#92400e').font('Helvetica-Oblique').fontSize(8.5).text('Dosage verification is assistive only and must be validated by a licensed clinician.', pageLeft, doc.y, { width: contentWidth });
       doc.moveDown(0.4);
+      drawDivider();
+      doc.moveDown(0.6);
+
+      const hasReferenceRows = referenceInsights.dosageRecommendations.length > 0 || referenceInsights.alternates.length > 0;
+      ensureSpace((hasReferenceRows ? 165 : 75) + 30);
+      drawSectionTitle('Reference-Based Verification');
+
+      const referenceCardY = doc.y;
+      const referenceCardHeight = hasReferenceRows ? 152 : 62;
+      doc.roundedRect(pageLeft, referenceCardY, contentWidth, referenceCardHeight, 8).fill('#f8fafc').strokeColor('#dbe3ef').lineWidth(1).stroke();
+
+      doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(10).text('Threats: Dosage Recommendations', pageLeft + 12, referenceCardY + 10, { width: (contentWidth / 2) - 18 });
+      const dosageLines = referenceInsights.dosageRecommendations.length > 0
+        ? referenceInsights.dosageRecommendations.slice(0, 3).map((item) => `• ${String(item).slice(0, 95)}`)
+        : ['• Threat: No dosage recommendation can be generated without medicine dosage details.'];
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.6).text(dosageLines.join('\n'), pageLeft + 12, referenceCardY + 25, {
+        width: (contentWidth / 2) - 20,
+        height: referenceCardHeight - 40
+      });
+
+      const rightColX = pageLeft + (contentWidth / 2) + 3;
+      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(10).text('Alternates: Therapeutic Interchanges', rightColX + 8, referenceCardY + 10, { width: (contentWidth / 2) - 18 });
+      const alternateLines = referenceInsights.alternates.length > 0
+        ? referenceInsights.alternates.slice(0, 3).map((item) => `• ${String(item).slice(0, 95)}`)
+        : ['• Opportunity: No direct therapeutic interchange identified from the current medicine list.'];
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.6).text(alternateLines.join('\n'), rightColX + 8, referenceCardY + 25, {
+        width: (contentWidth / 2) - 20,
+        height: referenceCardHeight - 40
+      });
+
+      doc.fillColor('#92400e').font('Helvetica-Oblique').fontSize(8.5).text(`Safety Protocol: ${referenceInsights.safetyProtocol}`, pageLeft + 12, referenceCardY + referenceCardHeight - 16, {
+        width: contentWidth - 24
+      });
+      doc.y = referenceCardY + referenceCardHeight + 8;
       drawDivider();
       doc.moveDown(0.6);
 
