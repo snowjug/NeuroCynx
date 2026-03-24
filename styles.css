@@ -408,7 +408,7 @@ body {
 }
 
 .dark-item {
-    /* Removed specific override to keep them uniform now */
+    background: var(--bg-card);
 }
 [data-theme="dark"] .dark-item {
     background: #1c1c1e;
@@ -899,6 +899,7 @@ footer {
     font-size: 32px;
     font-weight: 700;
     background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     display: block;
@@ -1041,14 +1042,6 @@ footer {
     90% { opacity: 1; }
     100% { top: 100%; opacity: 0; }
 }
-
-
-.process-steps {
-    position: relative;
-    /* Ensure line inside is handled correctly */
-}
-
-
 /* Extra pop for Light Mode Cards */
 html:not([data-theme='dark']) .grid-item,
 html:not([data-theme='dark']) .health-card,
@@ -1056,14 +1049,6 @@ html:not([data-theme='dark']) .glass-panel {
     border: 1px solid rgba(124, 58, 237, 0.08); /* Subtle violet border to separate from white bg */
     background: #ffffff;
 }
-
-
-.features {
-    position: relative;
-    overflow: hidden;
-}
-
-
 /* Analysis Results Styling */
 .analysis-results {
     margin-top: 80px;
@@ -1369,6 +1354,9 @@ html:not([data-theme='dark']) .glass-panel {
     }
     .analysis-action-btn {
         width: 100%;
+    }
+    .demo-actions {
+        grid-template-columns: 1fr !important;
     }
 }
 
@@ -1761,6 +1749,11 @@ html:not([data-theme='dark']) .glass-panel {
 
 .analysis-actions {
     align-items: center;
+}
+
+.demo-actions .btn {
+    width: 100%;
+    text-align: center;
 }
 
 .analysis-action-btn {
