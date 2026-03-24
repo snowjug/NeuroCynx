@@ -537,6 +537,7 @@
             const [patientAge, setPatientAge] = useState('');
             const [patientWeight, setPatientWeight] = useState('');
             const [patientGender, setPatientGender] = useState('unspecified');
+            const [profileAutofillStatus, setProfileAutofillStatus] = useState('idle'); // idle, loading, success, error
             const [clinicalStrictness, setClinicalStrictness] = useState('strict');
             const fileInputRef = useRef(null);
             const chartRef = useRef(null);
@@ -594,6 +595,7 @@
                 setDemoPromptMessage('');
                 setReportRecognition('unknown');
                 setMedicineDbComparisons([]);
+                autoFillPatientProfileFromFiles(filesArr);
             };
 
             const compareMedicinesWithOpenSourceDb = async (medicineItems) => {
@@ -656,6 +658,88 @@
                     };
                     reader.onerror = (error) => reject(error);
                 });
+            };
+
+            const normalizeAutofillGender = (value) => {
+                const raw = String(value || '').trim().toLowerCase();
+                if (!raw) return '';
+                if (raw.includes('female') || raw === 'f') return 'female';
+                if (raw.includes('male') || raw === 'm') return 'male';
+                if (raw.includes('other') || raw.includes('non-binary') || raw.includes('nonbinary')) return 'other';
+                return '';
+            };
+
+            const autoFillPatientProfileFromFiles = async (filesForAutofill) => {
+                const selectedFiles = Array.isArray(filesForAutofill) ? filesForAutofill.filter(Boolean) : [];
+                if (!selectedFiles.length) return;
+
+                setProfileAutofillStatus('loading');
+
+                try {
+                    const parts = [{
+                        text: `Extract patient demographic fields from this medical document.
+Return only strict JSON in this format:
+{
+  "patientName": "",
+  "patientWeightKg": null,
+  "patientGender": "male|female|other|unspecified"
+}
+
+Rules:
+- If a value is missing or uncertain, keep patientName as empty string, patientWeightKg as null, patientGender as "unspecified".
+- Weight must be numeric in kg only (no unit text). Convert to kg if document clearly provides another unit.
+- Do not guess values not present in the document.
+- Return JSON only.`
+                    }];
+
+                    for (let i = 0; i < selectedFiles.length; i++) {
+                        const file = selectedFiles[i];
+                        const base64Data = await fileToBase64(file);
+                        const mimeType = file.type || 'application/pdf';
+                        parts.push({
+                            inline_data: {
+                                mime_type: mimeType,
+                                data: base64Data
+                            }
+                        });
+                    }
+
+                    const result = await generateWithGeminiFallback({
+                        parts,
+                        responseMimeType: 'application/json'
+                    });
+
+                    const textResponse = result?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    const cleaned = String(textResponse).replace(/```json/g, '').replace(/```/g, '').trim();
+                    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+                    const payload = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+
+                    const extractedName = String(payload?.patientName || '').trim();
+                    const extractedWeight = Number(payload?.patientWeightKg);
+                    const extractedGender = normalizeAutofillGender(payload?.patientGender);
+
+                    if (extractedName) {
+                        setPatientName((current) => current.trim() ? current : extractedName);
+                    }
+
+                    if (Number.isFinite(extractedWeight) && extractedWeight > 0 && extractedWeight <= 300) {
+                        setPatientWeight((current) => current.trim() ? current : String(Math.round(extractedWeight * 10) / 10));
+                    }
+
+                    if (extractedGender) {
+                        setPatientGender((current) => current !== 'unspecified' ? current : extractedGender);
+                    }
+
+                    setProfileAutofillStatus('success');
+                    setTimeout(() => {
+                        setProfileAutofillStatus((current) => current === 'success' ? 'idle' : current);
+                    }, 1800);
+                } catch (_error) {
+                    setProfileAutofillStatus('error');
+                    setTimeout(() => {
+                        setProfileAutofillStatus((current) => current === 'error' ? 'idle' : current);
+                    }, 1800);
+                }
             };
 
             const handleSubmit = async (e) => {
@@ -1764,6 +1848,13 @@
                                         </div>
                                     ))}
                                 </div>
+                                {files.length > 0 && profileAutofillStatus !== 'idle' && (
+                                    <p style={{marginTop: '10px', fontSize: '12px', fontWeight: 600, color: profileAutofillStatus === 'error' ? '#b91c1c' : 'var(--accent)'}}>
+                                        {profileAutofillStatus === 'loading' && 'Extracting patient details from upload...'}
+                                        {profileAutofillStatus === 'success' && 'Patient details auto-filled from uploaded report.'}
+                                        {profileAutofillStatus === 'error' && 'Could not auto-fill profile from this file. You can enter values manually.'}
+                                    </p>
+                                )}
                                 {files.length > 0 && (
                                     <div style={{
                                         marginTop: '10px',
