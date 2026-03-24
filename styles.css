@@ -529,6 +529,116 @@ body {
     background: var(--bg-card);
 }
 
+.interactive-select {
+    position: relative;
+}
+
+.interactive-select-trigger {
+    width: 100%;
+    min-height: 50px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease, background 0.22s ease;
+}
+
+.interactive-select-trigger:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 5%, var(--input-bg));
+    transform: translateY(-1px);
+}
+
+.interactive-select.open .interactive-select-trigger,
+.interactive-select-trigger:focus-visible {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+    background: var(--bg-card);
+    outline: none;
+}
+
+.interactive-select-text {
+    text-align: left;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.interactive-select-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    transition: transform 0.22s ease;
+}
+
+.interactive-select.open .interactive-select-chevron {
+    transform: rotate(180deg);
+}
+
+.interactive-select-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    box-shadow: 0 18px 30px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.interactive-select-menu.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.interactive-select-option {
+    width: 100%;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.interactive-select-option:hover {
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    transform: translateX(2px);
+}
+
+.interactive-select-option.active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.interactive-select-option ion-icon {
+    font-size: 16px;
+}
+
 .drop-zone {
     border: 2px dashed var(--border);
     border-radius: 12px;
@@ -707,6 +817,7 @@ body {
     font-weight: 600;
     color: var(--accent);
     cursor: pointer;
+    text-decoration: none;
 }
 
 /* @keyframes scrollLeft - Removed */

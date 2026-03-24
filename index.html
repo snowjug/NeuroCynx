@@ -458,6 +458,64 @@
             );
         };
 
+        const AnimatedSelect = ({ value, onChange, options, placeholder }) => {
+            const [isOpen, setIsOpen] = useState(false);
+            const rootRef = useRef(null);
+            const selectedOption = options.find((option) => option.value === value) || options[0];
+
+            useEffect(() => {
+                const handleOutsideClick = (event) => {
+                    if (rootRef.current && !rootRef.current.contains(event.target)) {
+                        setIsOpen(false);
+                    }
+                };
+
+                document.addEventListener('mousedown', handleOutsideClick);
+                return () => document.removeEventListener('mousedown', handleOutsideClick);
+            }, []);
+
+            const handleToggle = () => {
+                setIsOpen((prev) => !prev);
+            };
+
+            const handleSelect = (nextValue) => {
+                onChange(nextValue);
+                setIsOpen(false);
+            };
+
+            return (
+                <div className={`interactive-select ${isOpen ? 'open' : ''}`} ref={rootRef}>
+                    <button
+                        type="button"
+                        className="interactive-select-trigger"
+                        onClick={handleToggle}
+                        aria-haspopup="listbox"
+                        aria-expanded={isOpen}
+                    >
+                        <span className="interactive-select-text">{selectedOption?.label || placeholder}</span>
+                        <span className="interactive-select-chevron" aria-hidden="true">
+                            <ion-icon name="chevron-down-outline"></ion-icon>
+                        </span>
+                    </button>
+                    <div className={`interactive-select-menu ${isOpen ? 'visible' : ''}`} role="listbox">
+                        {options.map((option) => (
+                            <button
+                                type="button"
+                                key={option.value}
+                                className={`interactive-select-option ${value === option.value ? 'active' : ''}`}
+                                onClick={() => handleSelect(option.value)}
+                                role="option"
+                                aria-selected={value === option.value}
+                            >
+                                <span>{option.label}</span>
+                                {value === option.value && <ion-icon name="checkmark-outline"></ion-icon>}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
         const UploadSection = () => {
             const HEALTH_METRIC_LABELS = ['Heart Health', 'Lung Function', 'Liver Health', 'Kidney Health', 'Metabolic Balance'];
             const [files, setFiles] = useState([]);
@@ -481,6 +539,17 @@
             const fileInputRef = useRef(null);
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
+            const genderOptions = [
+                { value: 'unspecified', label: 'Prefer not to say' },
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'other', label: 'Other' }
+            ];
+            const strictnessOptions = [
+                { value: 'balanced', label: 'Balanced' },
+                { value: 'strict', label: 'Strict' },
+                { value: 'conservative', label: 'Conservative' }
+            ];
 
             const [isDarkTheme, setIsDarkTheme] = useState(document.documentElement.getAttribute('data-theme') === 'dark');
             useEffect(() => {
@@ -781,6 +850,10 @@
                                     maintainAspectRatio: false,
                                     scales: {
                                         r: {
+                                            min: 0,
+                                            max: 100,
+                                            suggestedMin: 0,
+                                            suggestedMax: 100,
                                             angleLines: { display: true, color: gridColor, lineWidth: 1 },
                                             grid: { color: gridColor, circular: true, lineWidth: 1 },
                                             pointLabels: {
@@ -791,9 +864,7 @@
                                             ticks: {
                                                 display: false,
                                                 backdropColor: 'transparent',
-                                                stepSize: 20,
-                                                min: 0,
-                                                max: 100
+                                                stepSize: 20
                                             }
                                         }
                                     },
@@ -1200,8 +1271,46 @@
             const getRelevantHealthGraph = (rawGraph) => {
                 const fallbackScores = [84, 79, 82, 78, 76];
                 const source = Array.isArray(rawGraph) ? rawGraph : [];
+
+                const normalizeMetricLabel = (value) => {
+                    return String(value || '')
+                        .toLowerCase()
+                        .replace(/[^a-z]+/g, ' ')
+                        .trim();
+                };
+
+                const parseScore = (value) => {
+                    if (typeof value === 'number' && Number.isFinite(value)) {
+                        return value;
+                    }
+
+                    const textValue = String(value ?? '').trim();
+                    if (!textValue) {
+                        return null;
+                    }
+
+                    const numericMatch = textValue.match(/-?\d+(?:\.\d+)?/);
+                    if (!numericMatch) {
+                        return null;
+                    }
+
+                    const parsed = Number(numericMatch[0]);
+                    return Number.isFinite(parsed) ? parsed : null;
+                };
+
+                const scoreByLabel = new Map();
+                source.forEach((item) => {
+                    const normalizedLabel = normalizeMetricLabel(item?.label);
+                    if (!normalizedLabel) return;
+
+                    const parsedScore = parseScore(item?.score);
+                    if (parsedScore === null) return;
+
+                    scoreByLabel.set(normalizedLabel, parsedScore);
+                });
+
                 return HEALTH_METRIC_LABELS.map((label, index) => {
-                    const score = Number(source[index]?.score);
+                    const score = scoreByLabel.get(normalizeMetricLabel(label));
                     return {
                         label,
                         score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : fallbackScores[index]
@@ -1370,20 +1479,21 @@
                                     </div>
                                     <div className="input-group">
                                         <label>Gender</label>
-                                        <select value={patientGender} onChange={(e) => setPatientGender(e.target.value)}>
-                                            <option value="unspecified">Prefer not to say</option>
-                                            <option value="male">Male</option>
-                                            <option value="female">Female</option>
-                                            <option value="other">Other</option>
-                                        </select>
+                                        <AnimatedSelect
+                                            value={patientGender}
+                                            onChange={setPatientGender}
+                                            options={genderOptions}
+                                            placeholder="Select gender"
+                                        />
                                     </div>
                                     <div className="input-group">
                                         <label>Clinical Strictness</label>
-                                        <select value={clinicalStrictness} onChange={(e) => setClinicalStrictness(e.target.value)}>
-                                            <option value="balanced">Balanced</option>
-                                            <option value="strict">Strict</option>
-                                            <option value="conservative">Conservative</option>
-                                        </select>
+                                        <AnimatedSelect
+                                            value={clinicalStrictness}
+                                            onChange={setClinicalStrictness}
+                                            options={strictnessOptions}
+                                            placeholder="Select strictness"
+                                        />
                                     </div>
                                 </div>
                                 <div 
@@ -1649,12 +1759,12 @@
 
         const HealthTips = () => {
             const cards = [
-                { icon: "water-outline", title: "Cognitive Clarity", desc: "Hydration is key. Even 1% dehydration decreases cognitive function and focus." },
-                { icon: "moon-outline", title: "Deep Sleep Architecture", desc: "Protect your REM cycles. This is when your brain consolidates memory and clears toxins." },
-                { icon: "extension-puzzle-outline", title: "Neuroplasticity", desc: "Learn something new daily to form new neural pathways and keep your brain agile." },
-                { icon: "leaf-outline", title: "Brain Foods", desc: "Omega-3s and antioxidants in berries reduce oxidative stress in neural networks." },
-                { icon: "pulse-outline", title: "Stress Management", desc: "Chronic stress shrinks the hippocampus. Practice mindfulness to protect memory." },
-                { icon: "sunny-outline", title: "Morning Light", desc: "Exposure to sunlight resets your circadian rhythm for better sleep-wake cycles." }
+                { icon: "water-outline", title: "Cognitive Clarity", desc: "Hydration is key. Even 1% dehydration decreases cognitive function and focus.", url: "https://www.cdc.gov/healthy-weight-growth/water-healthy-drinks/index.html" },
+                { icon: "moon-outline", title: "Deep Sleep Architecture", desc: "Protect your REM cycles. This is when your brain consolidates memory and clears toxins.", url: "https://www.nhlbi.nih.gov/health/sleep/stages-of-sleep" },
+                { icon: "extension-puzzle-outline", title: "Neuroplasticity", desc: "Learn something new daily to form new neural pathways and keep your brain agile.", url: "https://www.health.harvard.edu/mind-and-mood/tips-to-support-brain-health" },
+                { icon: "leaf-outline", title: "Brain Foods", desc: "Omega-3s and antioxidants in berries reduce oxidative stress in neural networks.", url: "https://www.health.harvard.edu/mind-and-mood/foods-linked-to-better-brainpower" },
+                { icon: "pulse-outline", title: "Stress Management", desc: "Chronic stress shrinks the hippocampus. Practice mindfulness to protect memory.", url: "https://www.nimh.nih.gov/health/topics/caring-for-your-mental-health" },
+                { icon: "sunny-outline", title: "Morning Light", desc: "Exposure to sunlight resets your circadian rhythm for better sleep-wake cycles.", url: "https://www.sleepfoundation.org/circadian-rhythm" }
             ];
 
             // Duplicated for infinite loop
@@ -1736,7 +1846,9 @@
                                         </div>
                                     </div>
                                     <div className="card-footer">
-                                        <span className="card-action">Read More <ion-icon name="arrow-forward-outline"></ion-icon></span>
+                                        <a href={card.url} target="_blank" rel="noopener noreferrer" className="card-action" aria-label={`Read more about ${card.title}`}>
+                                            Read More <ion-icon name="arrow-forward-outline"></ion-icon>
+                                        </a>
                                     </div>
                                 </div>
                             ))}
