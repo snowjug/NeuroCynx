@@ -507,7 +507,24 @@ body {
     color: var(--text-primary);
 }
 
+.input-group select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    font-size: 17px;
+    outline: none;
+    transition: border-color 0.2s;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
 .input-group input:focus {
+    border-color: var(--accent);
+    background: var(--bg-card);
+}
+
+.input-group select:focus {
     border-color: var(--accent);
     background: var(--bg-card);
 }

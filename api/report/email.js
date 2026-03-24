@@ -86,6 +86,76 @@ const getReportInsights = (graphData) => {
   };
 };
 
+const getRiskMetaFromScore = (score) => {
+  if (score >= 70) {
+    return { label: 'High', color: '#991b1b', bg: '#fef2f2', border: '#fca5a5' };
+  }
+  if (score >= 40) {
+    return { label: 'Medium', color: '#92400e', bg: '#fffbeb', border: '#fcd34d' };
+  }
+  return { label: 'Low', color: '#065f46', bg: '#ecfdf5', border: '#86efac' };
+};
+
+const toSafeNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const normalizeDosageVerification = (rawDosage, medicineItems) => {
+  const fallbackMedicines = Array.isArray(medicineItems) ? medicineItems.filter(Boolean) : [];
+  const itemSource = Array.isArray(rawDosage?.items) && rawDosage.items.length > 0
+    ? rawDosage.items
+    : fallbackMedicines.map((medicine) => ({
+      medicine,
+      riskScore: 20,
+      riskLevel: 'Low',
+      riskFactors: ['Insufficient dosage metadata provided for robust verification.'],
+      longTermImpact: ['Long-term impact cannot be estimated accurately without duration details.']
+    }));
+
+  const normalizedItems = itemSource.map((item) => {
+    const safeScore = Math.max(0, Math.min(100, Math.round(Number(item?.riskScore) || 0)));
+    return {
+      medicine: toPlainText(item?.medicine || 'Medication'),
+      riskScore: safeScore,
+      riskLevel: String(item?.riskLevel || getRiskMetaFromScore(safeScore).label),
+      riskFactors: Array.isArray(item?.riskFactors) ? item.riskFactors.slice(0, 3).map((entry) => toPlainText(entry)).filter(Boolean) : [],
+      longTermImpact: Array.isArray(item?.longTermImpact) ? item.longTermImpact.slice(0, 3).map((entry) => toPlainText(entry)).filter(Boolean) : [],
+      parsed: {
+        doseMg: toSafeNumber(item?.parsed?.doseMg),
+        frequencyPerDay: toSafeNumber(item?.parsed?.frequencyPerDay),
+        durationDays: toSafeNumber(item?.parsed?.durationDays),
+        dailyDoseMg: toSafeNumber(item?.parsed?.dailyDoseMg),
+        doseCeilingMgPerDay: toSafeNumber(item?.parsed?.doseCeilingMgPerDay)
+      }
+    };
+  });
+
+  const avgScore = normalizedItems.length
+    ? Math.round(normalizedItems.reduce((sum, item) => sum + item.riskScore, 0) / normalizedItems.length)
+    : Math.max(0, Math.min(100, Math.round(Number(rawDosage?.overallRiskScore) || 18)));
+
+  const riskMeta = getRiskMetaFromScore(avgScore);
+  const riskFactors = Array.isArray(rawDosage?.riskFactors)
+    ? rawDosage.riskFactors.slice(0, 5).map((item) => toPlainText(item)).filter(Boolean)
+    : [];
+  const longTermImpact = Array.isArray(rawDosage?.longTermImpact)
+    ? rawDosage.longTermImpact.slice(0, 5).map((item) => toPlainText(item)).filter(Boolean)
+    : [];
+
+  return {
+    age: toSafeNumber(rawDosage?.age),
+    gender: toPlainText(rawDosage?.gender || 'unspecified') || 'unspecified',
+    strictnessProfile: toPlainText(rawDosage?.strictnessProfile || 'strict') || 'strict',
+    overallRiskScore: avgScore,
+    overallRiskLevel: String(rawDosage?.overallRiskLevel || riskMeta.label),
+    overallRiskMeta: riskMeta,
+    riskFactors: riskFactors.length ? riskFactors : ['Dosage verification inputs are limited; interpret with caution.'],
+    longTermImpact: longTermImpact.length ? longTermImpact : ['Long-term medication impact is uncertain due to incomplete dose-duration data.'],
+    items: normalizedItems
+  };
+};
+
 const buildResendTemplateHtml = ({
   patientName,
   reportId,
@@ -315,6 +385,7 @@ async function generateRadarChart(graphData) {
 async function generatePDF(patientName, analysis) {
   const chartBuffer = await generateRadarChart(analysis?.graph);
   const insights = getReportInsights(analysis?.graph);
+  const dosageInsights = normalizeDosageVerification(analysis?.dosageVerification, analysis?.medicine);
 
   return new Promise((resolve, reject) => {
     try {
@@ -345,6 +416,23 @@ async function generatePDF(patientName, analysis) {
         doc.moveDown(0.15);
         doc.font('Helvetica-Bold').fontSize(13).fillColor(textPrimary).text(title, pageLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.2);
+      };
+
+      const drawCompactDosageItemCard = (x, y, width, height, item) => {
+        const itemMeta = getRiskMetaFromScore(item.riskScore);
+        doc.roundedRect(x, y, width, height, 8).fill(itemMeta.bg).strokeColor(itemMeta.border).lineWidth(1).stroke();
+        doc.fillColor('#111827').font('Helvetica-Bold').fontSize(9.5).text(item.medicine.substring(0, 56), x + 10, y + 9, { width: width - 20 });
+        doc.fillColor(itemMeta.color).font('Helvetica-Bold').fontSize(9).text(`${itemMeta.label} • ${item.riskScore}/100`, x + 10, y + 24, { width: width - 20 });
+
+        const hasDailyDose = Number.isFinite(item?.parsed?.dailyDoseMg);
+        const hasDuration = Number.isFinite(item?.parsed?.durationDays);
+        const hasCeiling = Number.isFinite(item?.parsed?.doseCeilingMgPerDay);
+        const doseText = hasDailyDose ? `${item.parsed.dailyDoseMg} mg/day` : 'Daily dose unknown';
+        const durationText = hasDuration ? `${item.parsed.durationDays} days` : 'Duration unknown';
+        const ceilingText = hasCeiling ? `${item.parsed.doseCeilingMgPerDay} mg/day` : 'Ceiling unknown';
+        doc.fillColor('#4b5563').font('Helvetica').fontSize(8.5).text(`Dose: ${doseText}`, x + 10, y + 39, { width: width - 20 });
+        doc.text(`Ceiling: ${ceilingText}`, x + 10, y + 50, { width: width - 20 });
+        doc.text(`Duration: ${durationText}`, x + 10, y + 61, { width: width - 20 });
       };
 
       const drawHighlightCards = (metrics) => {
@@ -606,6 +694,68 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(0.5);
 
       const medicineItems = Array.isArray(analysis?.medicine) ? analysis.medicine : [];
+
+      // Dosage Verification section
+      const dosageItems = Array.isArray(dosageInsights.items) ? dosageInsights.items : [];
+      const dosageCardsRows = Math.max(1, Math.ceil(Math.min(dosageItems.length, 6) / 2));
+      const dosageSectionHeight = 150 + (dosageCardsRows * 78);
+      ensureSpace(dosageSectionHeight + 18);
+      drawSectionTitle('Dosage Verification');
+
+      const dosageRisk = dosageInsights.overallRiskMeta;
+      const dosageHeaderY = doc.y;
+      doc.roundedRect(pageLeft, dosageHeaderY, contentWidth, 62, 8).fill('#f8fafc').strokeColor('#dbe3ef').lineWidth(1).stroke();
+
+      doc.fillColor('#1f2937').font('Helvetica-Bold').fontSize(10).text('Age & Gender Context', pageLeft + 12, dosageHeaderY + 10);
+      const hasAge = Number.isFinite(dosageInsights.age);
+      const ageText = hasAge ? `${Math.round(dosageInsights.age)}` : 'Not provided';
+      doc.fillColor('#4b5563').font('Helvetica').fontSize(9.5).text(`Age: ${ageText} | Gender: ${toPlainText(dosageInsights.gender) || 'unspecified'}`, pageLeft + 12, dosageHeaderY + 24, { width: contentWidth - 190 });
+      doc.fillColor('#4b5563').font('Helvetica').fontSize(9.5).text(`Strictness: ${toPlainText(dosageInsights.strictnessProfile) || 'strict'}`, pageLeft + 12, dosageHeaderY + 38, { width: contentWidth - 190 });
+
+      doc.roundedRect(pageRight - 170, dosageHeaderY + 16, 156, 28, 14).fill(dosageRisk.bg).strokeColor(dosageRisk.border).lineWidth(1).stroke();
+      doc.fillColor(dosageRisk.color).font('Helvetica-Bold').fontSize(9.5).text(`${dosageRisk.label} Risk • ${dosageInsights.overallRiskScore}/100`, pageRight - 162, dosageHeaderY + 26, { width: 140, align: 'center' });
+      doc.y = dosageHeaderY + 70;
+
+      const factorBoxY = doc.y;
+      const factorBoxHeight = 66;
+      doc.roundedRect(pageLeft, factorBoxY, (contentWidth - 10) / 2, factorBoxHeight, 8).fill('#eff6ff').strokeColor('#bfdbfe').lineWidth(1).stroke();
+      doc.roundedRect(pageLeft + ((contentWidth - 10) / 2) + 10, factorBoxY, (contentWidth - 10) / 2, factorBoxHeight, 8).fill('#fffbeb').strokeColor('#fcd34d').lineWidth(1).stroke();
+
+      doc.fillColor('#1d4ed8').font('Helvetica-Bold').fontSize(9.5).text('Key Risk Factors', pageLeft + 10, factorBoxY + 9);
+      const factorText = dosageInsights.riskFactors.slice(0, 2).join(' • ');
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.5).text(factorText || 'No major risk factors provided.', pageLeft + 10, factorBoxY + 24, { width: ((contentWidth - 10) / 2) - 20 });
+
+      doc.fillColor('#92400e').font('Helvetica-Bold').fontSize(9.5).text('Long-Term Impact', pageLeft + ((contentWidth - 10) / 2) + 20, factorBoxY + 9);
+      const impactText = dosageInsights.longTermImpact.slice(0, 2).join(' • ');
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.5).text(impactText || 'Long-term impact unavailable from provided data.', pageLeft + ((contentWidth - 10) / 2) + 20, factorBoxY + 24, { width: ((contentWidth - 10) / 2) - 20 });
+
+      doc.y = factorBoxY + factorBoxHeight + 8;
+
+      if (dosageItems.length > 0) {
+        const cards = dosageItems.slice(0, 6);
+        const colGap = 10;
+        const cardWidth = (contentWidth - colGap) / 2;
+        const cardHeight = 84;
+
+        for (let i = 0; i < cards.length; i += 2) {
+          ensureSpace(cardHeight + 8);
+          const rowY = doc.y;
+          drawCompactDosageItemCard(pageLeft, rowY, cardWidth, cardHeight, cards[i]);
+          if (cards[i + 1]) {
+            drawCompactDosageItemCard(pageLeft + cardWidth + colGap, rowY, cardWidth, cardHeight, cards[i + 1]);
+          }
+          doc.y = rowY + cardHeight + 7;
+        }
+      } else {
+        doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No medication entries were available for dosage verification.', pageLeft, doc.y, { width: contentWidth });
+        doc.moveDown(0.3);
+      }
+
+      doc.fillColor('#92400e').font('Helvetica-Oblique').fontSize(8.5).text('Dosage verification is assistive only and must be validated by a licensed clinician.', pageLeft, doc.y, { width: contentWidth });
+      doc.moveDown(0.4);
+      drawDivider();
+      doc.moveDown(0.6);
+
       ensureSpace((medicineItems.length > 0 ? 145 : 40) + 30);
       drawSectionTitle('Medication Guidance');
       

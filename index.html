@@ -473,6 +473,11 @@
             const [pdfStatus, setPdfStatus] = useState('idle'); // idle, generating, done
             const [showBookingModal, setShowBookingModal] = useState(false);
             const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+            const [patientName, setPatientName] = useState('');
+            const [patientEmail, setPatientEmail] = useState('');
+            const [patientAge, setPatientAge] = useState('');
+            const [patientGender, setPatientGender] = useState('unspecified');
+            const [clinicalStrictness, setClinicalStrictness] = useState('strict');
             const fileInputRef = useRef(null);
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
@@ -524,7 +529,10 @@
             const getDemoPreviewAnalysis = () => ({
                 summary: 'Demo Preview: Live AI analysis is temporarily unavailable. This is a simulated report preview and not a clinical diagnosis.',
                 care: ['Maintain regular sleep schedule (7-8 hours)', 'Stay hydrated (2-3 liters/day)', 'Take short breaks during intense work'],
-                medicine: ['General wellness supplements only after clinician advice'],
+                medicine: [
+                    'Paracetamol 500 mg - twice daily - 5 days',
+                    'Aspirin 75 mg - once daily - 6 months'
+                ],
                 lifestyle: ['Add moderate daily walking', 'Reduce late-night screen exposure', 'Adopt balanced meals and stress management'],
                 swot: {
                     strengths: ['No critical red flags in preview template', 'Consistent baseline wellness indicators', 'Suitable for preventive follow-up'],
@@ -585,7 +593,7 @@
                             },
                             "summary": "Detailed professional summary.",
                             "care": ["Step 1", "Step 2"],
-                            "medicine": ["Medication Name - Dosage - Frequency (Disclaimer: Consult doctor)"],
+                            "medicine": ["Medication Name - Dosage - Frequency - Duration (if available)"],
                             "lifestyle": ["Recommendation 1", "Recommendation 2"],
                             "swot": {
                                 "strengths": ["Item 1", "Item 2", "Item 3"],
@@ -853,6 +861,345 @@
                 return items.map((s, i) => <li key={i}>{s}</li>);
             };
 
+            const toTitleCase = (value) => {
+                const raw = String(value || '').toLowerCase();
+                if (!raw) return 'Unspecified';
+                return raw.charAt(0).toUpperCase() + raw.slice(1);
+            };
+
+            const parseDoseToMg = (text) => {
+                const match = String(text || '').match(/(\d+(?:\.\d+)?)\s*(mcg|ug|mg|g)\b/i);
+                if (!match) return null;
+
+                const value = Number(match[1]);
+                const unit = match[2].toLowerCase();
+                if (!Number.isFinite(value)) return null;
+
+                if (unit === 'g') return value * 1000;
+                if (unit === 'mcg' || unit === 'ug') return value / 1000;
+                return value;
+            };
+
+            const parseFrequencyPerDay = (text) => {
+                const input = String(text || '').toLowerCase();
+
+                if (/\b(once daily|once a day|\bod\b|\bqd\b)\b/.test(input)) return 1;
+                if (/\b(twice daily|twice a day|\bbid\b|2\s*(x|times)\s*(a|per)?\s*day)\b/.test(input)) return 2;
+                if (/\b(thrice daily|three times daily|three times a day|\btid\b|3\s*(x|times)\s*(a|per)?\s*day)\b/.test(input)) return 3;
+                if (/\b(four times daily|\bqid\b|4\s*(x|times)\s*(a|per)?\s*day)\b/.test(input)) return 4;
+                if (/\b(weekly|once weekly|once a week)\b/.test(input)) return 1 / 7;
+
+                const qhMatch = input.match(/\bq\s*(\d+)\s*h\b/);
+                if (qhMatch) {
+                    const hours = Number(qhMatch[1]);
+                    if (hours > 0) return Math.min(24, Math.max(1 / 7, 24 / hours));
+                }
+
+                const everyHourMatch = input.match(/every\s*(\d+)\s*hours?/);
+                if (everyHourMatch) {
+                    const hours = Number(everyHourMatch[1]);
+                    if (hours > 0) return Math.min(24, Math.max(1 / 7, 24 / hours));
+                }
+
+                const explicitDailyMatch = input.match(/(\d+(?:\.\d+)?)\s*(x|times)\s*(a|per)?\s*day/);
+                if (explicitDailyMatch) {
+                    const times = Number(explicitDailyMatch[1]);
+                    if (Number.isFinite(times) && times > 0) return Math.min(24, times);
+                }
+
+                return null;
+            };
+
+            const parseDurationDays = (text) => {
+                const input = String(text || '').toLowerCase();
+                const match = input.match(/(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months|year|years)\b/);
+                if (!match) return null;
+
+                const value = Number(match[1]);
+                const unit = match[2];
+                if (!Number.isFinite(value)) return null;
+
+                if (unit.startsWith('day')) return Math.round(value);
+                if (unit.startsWith('week')) return Math.round(value * 7);
+                if (unit.startsWith('month')) return Math.round(value * 30);
+                return Math.round(value * 365);
+            };
+
+            const getRiskLabelMeta = (score, thresholds = { high: 70, medium: 40 }) => {
+                if (score >= thresholds.high) {
+                    return { label: 'High', color: '#991b1b', bg: '#fef2f2', border: '#fca5a5' };
+                }
+                if (score >= thresholds.medium) {
+                    return { label: 'Medium', color: '#92400e', bg: '#fffbeb', border: '#fcd34d' };
+                }
+                return { label: 'Low', color: '#065f46', bg: '#ecfdf5', border: '#86efac' };
+            };
+
+            const getStrictnessConfig = (profile) => {
+                if (profile === 'conservative') {
+                    return {
+                        profile: 'conservative',
+                        baseScore: 26,
+                        thresholds: { high: 60, medium: 32 },
+                        agePenalty: { pediatric: 28, adolescent: 12, geriatric65: 22, geriatric75: 30 },
+                        dosePenalty: { elevated: 16, moderateHigh: 26, high: 36 },
+                        durationPenalty: { month: 8, quarter: 16, halfYear: 26 }
+                    };
+                }
+
+                if (profile === 'balanced') {
+                    return {
+                        profile: 'balanced',
+                        baseScore: 20,
+                        thresholds: { high: 72, medium: 42 },
+                        agePenalty: { pediatric: 18, adolescent: 8, geriatric65: 16, geriatric75: 22 },
+                        dosePenalty: { elevated: 10, moderateHigh: 18, high: 28 },
+                        durationPenalty: { month: 5, quarter: 10, halfYear: 18 }
+                    };
+                }
+
+                return {
+                    profile: 'strict',
+                    baseScore: 24,
+                    thresholds: { high: 65, medium: 36 },
+                    agePenalty: { pediatric: 24, adolescent: 10, geriatric65: 20, geriatric75: 26 },
+                    dosePenalty: { elevated: 14, moderateHigh: 24, high: 34 },
+                    durationPenalty: { month: 7, quarter: 14, halfYear: 22 }
+                };
+            };
+
+            const classifyMedicine = (rawText) => {
+                const text = String(rawText || '').toLowerCase();
+                if (/\b(paracetamol|acetaminophen)\b/.test(text)) return 'paracetamol';
+                if (/\b(ibuprofen|diclofenac|naproxen|ketorolac|nsaid)\b/.test(text)) return 'nsaid';
+                if (/\b(aspirin|warfarin|clopidogrel|heparin|rivaroxaban|apixaban|anticoagulant)\b/.test(text)) return 'anticoagulant';
+                if (/\b(steroid|prednisone|prednisolone|dexamethasone|methylprednisolone)\b/.test(text)) return 'steroid';
+                if (/\b(opioid|tramadol|morphine|codeine|oxycodone|fentanyl)\b/.test(text)) return 'opioid';
+                if (/\b(amoxicillin|azithromycin|cef|ciprofloxacin|antibiotic)\b/.test(text)) return 'antibiotic';
+                return 'general';
+            };
+
+            const getDoseCeilingMgPerDay = ({ medicineClass, age, strictness }) => {
+                const isPediatric = Number.isFinite(age) && age <= 12;
+                const isGeriatric = Number.isFinite(age) && age >= 65;
+                const strictnessMultiplier = strictness === 'conservative' ? 0.8 : strictness === 'strict' ? 0.9 : 1;
+
+                const baseCeilings = {
+                    paracetamol: isPediatric ? 1500 : isGeriatric ? 2500 : 3000,
+                    nsaid: isPediatric ? 800 : isGeriatric ? 1000 : 1200,
+                    anticoagulant: isPediatric ? 120 : isGeriatric ? 100 : 150,
+                    steroid: isPediatric ? 20 : isGeriatric ? 30 : 40,
+                    opioid: isPediatric ? 40 : isGeriatric ? 50 : 60,
+                    antibiotic: isPediatric ? 1200 : isGeriatric ? 1500 : 2000,
+                    general: isPediatric ? 900 : isGeriatric ? 1200 : 1500
+                };
+
+                return Math.round((baseCeilings[medicineClass] || baseCeilings.general) * strictnessMultiplier);
+            };
+
+            const getLongTermImpact = ({ riskScore, rawText, durationDays }) => {
+                const notes = [];
+                const lower = String(rawText || '').toLowerCase();
+
+                if (durationDays >= 180) {
+                    notes.push('Extended duration may increase cumulative side-effect burden and organ stress.');
+                } else if (durationDays >= 90) {
+                    notes.push('Sustained use warrants periodic clinical monitoring and laboratory follow-up.');
+                } else if (durationDays >= 30) {
+                    notes.push('Monthly use pattern should be reviewed to prevent avoidable long-term exposure.');
+                }
+
+                if (/\b(steroid|prednisone|dexamethasone)\b/.test(lower)) {
+                    notes.push('Long-term steroid exposure may affect bone density, glucose control, and immunity.');
+                }
+                if (/\b(ibuprofen|diclofenac|naproxen|nsaid)\b/.test(lower)) {
+                    notes.push('Chronic NSAID use can elevate kidney and gastrointestinal risk in vulnerable patients.');
+                }
+                if (/\b(aspirin|warfarin|clopidogrel|anticoagulant)\b/.test(lower)) {
+                    notes.push('Extended blood-thinner therapy requires regular bleeding-risk review and dose checks.');
+                }
+                if (/\b(opioid|tramadol|morphine|codeine)\b/.test(lower)) {
+                    notes.push('Prolonged opioid use may increase dependence risk and reduce functional resilience.');
+                }
+
+                if (riskScore >= 70) {
+                    notes.push('High-risk profile: schedule earlier physician review and tighter monitoring intervals.');
+                } else if (riskScore >= 40) {
+                    notes.push('Moderate-risk profile: maintain follow-up cadence and monitor symptoms closely.');
+                } else {
+                    notes.push('Low-risk profile: continue routine monitoring and reassess if symptoms evolve.');
+                }
+
+                return notes.slice(0, 3);
+            };
+
+            const buildDosageVerification = (medicineItems, ageInput, genderInput, strictnessInput) => {
+                const meds = Array.isArray(medicineItems) ? medicineItems.filter(Boolean) : [];
+                const age = Number(ageInput);
+                const hasAge = Number.isFinite(age) && age > 0;
+                const gender = String(genderInput || 'unspecified').toLowerCase();
+                const normalizedGender = ['male', 'female', 'other'].includes(gender) ? gender : 'unspecified';
+                const strictnessConfig = getStrictnessConfig(strictnessInput);
+
+                if (!meds.length) {
+                    return {
+                        age: hasAge ? age : null,
+                        gender: normalizedGender,
+                        strictnessProfile: strictnessConfig.profile,
+                        overallRiskScore: 18,
+                        overallRiskLevel: 'Low',
+                        riskFactors: ['No medication entries found in the report.'],
+                        longTermImpact: ['Cannot estimate long-term medication impact without dosage/frequency entries.'],
+                        items: []
+                    };
+                }
+
+                const commonRiskFactors = new Set();
+
+                const items = meds.map((medText) => {
+                    const doseMg = parseDoseToMg(medText);
+                    const frequencyPerDay = parseFrequencyPerDay(medText);
+                    const durationDays = parseDurationDays(medText);
+                    const dailyDoseMg = doseMg && frequencyPerDay ? Math.round(doseMg * frequencyPerDay) : null;
+                    const medicineClass = classifyMedicine(medText);
+                    const doseCeilingMgPerDay = getDoseCeilingMgPerDay({
+                        medicineClass,
+                        age: hasAge ? age : null,
+                        strictness: strictnessConfig.profile
+                    });
+
+                    let score = strictnessConfig.baseScore;
+                    const factors = [];
+
+                    if (dailyDoseMg !== null) {
+                        if (dailyDoseMg > (doseCeilingMgPerDay * 1.5)) {
+                            score += strictnessConfig.dosePenalty.high + 10;
+                            factors.push(`Dose exceeds class ceiling significantly (${dailyDoseMg} mg/day vs ${doseCeilingMgPerDay} mg/day).`);
+                            commonRiskFactors.add('One or more medicines exceed class-specific daily dose ceiling.');
+                        } else if (dailyDoseMg > doseCeilingMgPerDay) {
+                            score += strictnessConfig.dosePenalty.high;
+                            factors.push(`Dose exceeds class ceiling (${dailyDoseMg} mg/day vs ${doseCeilingMgPerDay} mg/day).`);
+                            commonRiskFactors.add('Dose is above medicine-class recommended ceiling.');
+                        } else if (dailyDoseMg > 2000) {
+                            score += strictnessConfig.dosePenalty.high;
+                            factors.push(`High daily exposure (${dailyDoseMg} mg/day).`);
+                            commonRiskFactors.add('High daily medication exposure detected.');
+                        } else if (dailyDoseMg > 1000) {
+                            score += strictnessConfig.dosePenalty.moderateHigh;
+                            factors.push(`Moderately high daily exposure (${dailyDoseMg} mg/day).`);
+                            commonRiskFactors.add('Moderately high daily medication exposure detected.');
+                        } else if (dailyDoseMg > 500) {
+                            score += strictnessConfig.dosePenalty.elevated;
+                            factors.push(`Elevated daily exposure (${dailyDoseMg} mg/day).`);
+                        }
+                    } else {
+                        score += 8;
+                        factors.push('Incomplete dose/frequency details reduce verification confidence.');
+                        commonRiskFactors.add('Some medicines lack complete dosage details.');
+                    }
+
+                    if (hasAge) {
+                        if (age >= 75) {
+                            score += strictnessConfig.agePenalty.geriatric75;
+                            factors.push('Very high age-related sensitivity to adverse effects (75+).');
+                            commonRiskFactors.add('Age 75+ requires strict dose review and frequent monitoring.');
+                        } else if (age >= 65) {
+                            score += strictnessConfig.agePenalty.geriatric65;
+                            factors.push('Age-related sensitivity to adverse effects (65+).');
+                            commonRiskFactors.add('Age 65+ needs closer dose tolerance monitoring.');
+                        } else if (age <= 12) {
+                            score += strictnessConfig.agePenalty.pediatric;
+                            factors.push('Pediatric dosing requires strict weight/age verification.');
+                            commonRiskFactors.add('Pediatric age group increases dosing sensitivity.');
+                        } else if (age <= 17) {
+                            score += strictnessConfig.agePenalty.adolescent;
+                            factors.push('Adolescent dosing should be confirmed for growth-stage safety.');
+                        }
+                    } else {
+                        factors.push('Age not provided, so age-adjusted verification is limited.');
+                        commonRiskFactors.add('Age data missing for full dose verification.');
+                    }
+
+                    if (normalizedGender === 'female' && dailyDoseMg !== null && dailyDoseMg > 1000) {
+                        score += 4;
+                        factors.push('Additional review advised for higher-dose female-specific tolerability differences.');
+                    }
+
+                    if (durationDays !== null) {
+                        if (durationDays >= 180) {
+                            score += strictnessConfig.durationPenalty.halfYear;
+                            factors.push('Long-term planned use (>= 6 months).');
+                            commonRiskFactors.add('Long-term therapy duration raises cumulative risk.');
+                        } else if (durationDays >= 90) {
+                            score += strictnessConfig.durationPenalty.quarter;
+                            factors.push('Extended use (>= 3 months).');
+                            commonRiskFactors.add('Extended therapy duration requires periodic review.');
+                        } else if (durationDays >= 30) {
+                            score += strictnessConfig.durationPenalty.month;
+                            factors.push('Monthly use duration should be reviewed with clinician.');
+                        }
+                    } else {
+                        commonRiskFactors.add('Duration missing for one or more medicines.');
+                    }
+
+                    const rawLower = String(medText || '').toLowerCase();
+                    if (/\b(steroid|prednisone|dexamethasone)\b/.test(rawLower)) {
+                        score += 14;
+                        factors.push('Steroid class requires tighter long-term metabolic and bone monitoring.');
+                    }
+                    if (/\b(ibuprofen|diclofenac|naproxen|nsaid)\b/.test(rawLower)) {
+                        score += 10;
+                        factors.push('NSAID class may increase kidney and gastric risk over time.');
+                    }
+                    if (/\b(opioid|tramadol|morphine|codeine)\b/.test(rawLower)) {
+                        score += 18;
+                        factors.push('Opioid-class medicines carry dependence and tolerance risk.');
+                    }
+
+                    const boundedScore = Math.max(0, Math.min(100, Math.round(score)));
+                    const levelMeta = getRiskLabelMeta(boundedScore, strictnessConfig.thresholds);
+
+                    return {
+                        medicine: medText,
+                        medicineClass,
+                        parsed: {
+                            doseMg,
+                            frequencyPerDay,
+                            durationDays,
+                            dailyDoseMg,
+                            doseCeilingMgPerDay
+                        },
+                        riskScore: boundedScore,
+                        riskLevel: levelMeta.label,
+                        riskFactors: factors.slice(0, 3),
+                        longTermImpact: getLongTermImpact({
+                            riskScore: boundedScore,
+                            rawText: medText,
+                            durationDays: durationDays || 0
+                        })
+                    };
+                });
+
+                if (items.length >= 4) {
+                    commonRiskFactors.add('Polypharmacy pattern detected (4+ medications).');
+                }
+
+                const overallRiskScore = Math.round(items.reduce((sum, item) => sum + item.riskScore, 0) / items.length);
+                const overallMeta = getRiskLabelMeta(overallRiskScore, strictnessConfig.thresholds);
+                const longTermImpact = Array.from(new Set(items.flatMap((item) => item.longTermImpact))).slice(0, 4);
+
+                return {
+                    age: hasAge ? age : null,
+                    gender: normalizedGender,
+                    strictnessProfile: strictnessConfig.profile,
+                    overallRiskScore,
+                    overallRiskLevel: overallMeta.label,
+                    riskFactors: Array.from(commonRiskFactors).slice(0, 5),
+                    longTermImpact,
+                    items
+                };
+            };
+
             const getRelevantHealthGraph = (rawGraph) => {
                 const fallbackScores = [84, 79, 82, 78, 76];
                 const source = Array.isArray(rawGraph) ? rawGraph : [];
@@ -875,18 +1222,24 @@
             const sortedMetrics = [...healthGraphData].sort((a, b) => b.score - a.score);
             const topStrength = sortedMetrics[0];
             const focusArea = sortedMetrics[sortedMetrics.length - 1];
+            const dosageVerification = buildDosageVerification(analysis?.medicine, patientAge, patientGender, clinicalStrictness);
+            const dosageThresholds = getStrictnessConfig(clinicalStrictness).thresholds;
+            const dosageRiskMeta = getRiskLabelMeta(dosageVerification.overallRiskScore, dosageThresholds);
 
             const getReportPayload = () => {
-                const patientName = document.querySelector('input[placeholder="John Doe"]')?.value?.trim() || 'Patient';
                 return {
-                    patientName,
+                    patientName: patientName.trim() || 'Patient',
+                    patientAge: Number.isFinite(Number(patientAge)) ? Number(patientAge) : null,
+                    patientGender,
+                    clinicalStrictness,
                     analysis: {
                         summary: analysis?.summary,
                         care: analysis?.care,
                         medicine: analysis?.medicine,
                         lifestyle: analysis?.lifestyle,
                         swot: analysis?.swot,
-                        graph: healthGraphData
+                        graph: healthGraphData,
+                        dosageVerification
                     }
                 };
             };
@@ -896,7 +1249,7 @@
                     return;
                 }
 
-                const email = document.getElementById('userEmail')?.value;
+                const email = patientEmail.trim();
                 if (!email) {
                     alert("Please enter an email address above to send the report.");
                     return;
@@ -990,11 +1343,50 @@
                                 <div className="input-grid">
                                     <div className="input-group">
                                         <label>Full Name</label>
-                                        <input type="text" placeholder="John Doe" />
+                                        <input
+                                            type="text"
+                                            placeholder="John Doe"
+                                            value={patientName}
+                                            onChange={(e) => setPatientName(e.target.value)}
+                                        />
                                     </div>
                                     <div className="input-group">
                                         <label>Email Address</label>
-                                        <input type="email" id="userEmail" placeholder="john@example.com" />
+                                        <input
+                                            type="email"
+                                            id="userEmail"
+                                            placeholder="john@example.com"
+                                            value={patientEmail}
+                                            onChange={(e) => setPatientEmail(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Age</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="120"
+                                            placeholder="35"
+                                            value={patientAge}
+                                            onChange={(e) => setPatientAge(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Gender</label>
+                                        <select value={patientGender} onChange={(e) => setPatientGender(e.target.value)}>
+                                            <option value="unspecified">Prefer not to say</option>
+                                            <option value="male">Male</option>
+                                            <option value="female">Female</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Clinical Strictness</label>
+                                        <select value={clinicalStrictness} onChange={(e) => setClinicalStrictness(e.target.value)}>
+                                            <option value="balanced">Balanced</option>
+                                            <option value="strict">Strict</option>
+                                            <option value="conservative">Conservative</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div 
@@ -1079,6 +1471,10 @@
                                                 <div style={{fontSize: '11px', color: '#92400e', fontWeight: 700}}>Focus Area</div>
                                                 <div style={{fontSize: '14px', color: '#0f172a', fontWeight: 700, marginTop: '2px'}}>{focusArea.label} ({focusArea.score})</div>
                                             </div>
+                                            <div style={{background: dosageRiskMeta.bg, border: `1px solid ${dosageRiskMeta.border}`, borderRadius: '10px', padding: '10px 12px', textAlign: 'left'}}>
+                                                <div style={{fontSize: '11px', color: dosageRiskMeta.color, fontWeight: 700}}>Dosage Risk</div>
+                                                <div style={{fontSize: '14px', color: '#0f172a', fontWeight: 700, marginTop: '2px'}}>{dosageVerification.overallRiskLevel} ({dosageVerification.overallRiskScore}/100)</div>
+                                            </div>
                                         </div>
                                         <div className="analysis-actions" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '20px', flexWrap: 'wrap'}}>
                                             <button className={`analysis-action-btn voice-btn ${isPlayingVoice ? 'playing' : ''}`} onClick={() => speakText(analysis.summary)}>
@@ -1159,6 +1555,75 @@
                                                     <ul>{renderSwot(analysis.swot && analysis.swot.threats)}</ul>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        <div className="result-card" style={{gridColumn: '1 / -1'}}>
+                                            <h3><ion-icon name="shield-half-outline"></ion-icon> Dosage Verification</h3>
+                                            <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px'}}>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: `1px solid ${dosageRiskMeta.border}`, background: dosageRiskMeta.bg, color: dosageRiskMeta.color, fontSize: '12px', fontWeight: 700}}>
+                                                    Risk Level: {dosageVerification.overallRiskLevel}
+                                                </div>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
+                                                    Risk Score: {dosageVerification.overallRiskScore}/100
+                                                </div>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
+                                                    Age: {dosageVerification.age ?? 'Not Provided'}
+                                                </div>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
+                                                    Gender: {toTitleCase(dosageVerification.gender)}
+                                                </div>
+                                                <div style={{padding: '8px 12px', borderRadius: '999px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: '12px', fontWeight: 700}}>
+                                                    Strictness: {toTitleCase(dosageVerification.strictnessProfile || clinicalStrictness)}
+                                                </div>
+                                            </div>
+
+                                            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '14px'}}>
+                                                <div style={{background: '#f8fafc', border: '1px solid #dbeafe', borderRadius: '12px', padding: '12px'}}>
+                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#1e3a8a'}}>Risk Factors</h4>
+                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
+                                                        {dosageVerification.riskFactors.length > 0
+                                                            ? dosageVerification.riskFactors.map((factor, idx) => <li key={idx}>{factor}</li>)
+                                                            : <li>No major dosage risk factors found.</li>}
+                                                    </ul>
+                                                </div>
+                                                <div style={{background: '#f8fafc', border: '1px solid #fde68a', borderRadius: '12px', padding: '12px'}}>
+                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#92400e'}}>Long-Term Impact</h4>
+                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
+                                                        {dosageVerification.longTermImpact.length > 0
+                                                            ? dosageVerification.longTermImpact.map((impact, idx) => <li key={idx}>{impact}</li>)
+                                                            : <li>Insufficient data for long-term medication impact assessment.</li>}
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            {dosageVerification.items.length > 0 ? (
+                                                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px'}}>
+                                                    {dosageVerification.items.map((item, idx) => {
+                                                        const itemMeta = getRiskLabelMeta(item.riskScore);
+                                                        return (
+                                                            <div key={idx} style={{border: `1px solid ${itemMeta.border}`, background: itemMeta.bg, borderRadius: '12px', padding: '12px'}}>
+                                                                <div style={{display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start'}}>
+                                                                    <h4 style={{margin: 0, fontSize: '13px', color: '#111827', lineHeight: 1.4}}>{item.medicine}</h4>
+                                                                    <span style={{fontSize: '11px', fontWeight: 700, color: itemMeta.color, whiteSpace: 'nowrap'}}>{item.riskLevel}</span>
+                                                                </div>
+                                                                <div style={{marginTop: '8px', fontSize: '12px', color: '#374151'}}>Score: <strong>{item.riskScore}/100</strong></div>
+                                                                <div style={{marginTop: '8px', fontSize: '12px', color: '#374151'}}>
+                                                                    Daily Dose: {item.parsed.dailyDoseMg !== null ? `${item.parsed.dailyDoseMg} mg/day` : 'Unknown'}
+                                                                </div>
+                                                                <div style={{marginTop: '6px', fontSize: '12px', color: '#374151'}}>
+                                                                    Class Ceiling: {item.parsed.doseCeilingMgPerDay !== null ? `${item.parsed.doseCeilingMgPerDay} mg/day` : 'Unknown'}
+                                                                </div>
+                                                                <div style={{marginTop: '6px', fontSize: '12px', color: '#374151'}}>
+                                                                    Duration: {item.parsed.durationDays !== null ? `${item.parsed.durationDays} days` : 'Unknown'}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <p style={{marginTop: '10px', color: 'var(--text-secondary)', fontSize: '14px'}}>No medicine dosage entries available for verification.</p>
+                                            )}
+                                            <p style={{marginTop: '12px', fontSize: '12px', color: '#92400e', fontWeight: 600}}>Dosage verification is assistive only and must be reviewed by a licensed clinician before treatment decisions.</p>
                                         </div>
 
                                         <div className="result-card">
