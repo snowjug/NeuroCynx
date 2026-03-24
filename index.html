@@ -1329,7 +1329,10 @@
                     const doseMg = parseDoseToMg(medText);
                     const frequencyPerDay = parseFrequencyPerDay(medText);
                     const durationDays = parseDurationDays(medText);
-                    const dailyDoseMg = doseMg && frequencyPerDay ? Math.round(doseMg * frequencyPerDay) : null;
+                    const hasDoseValue = Number.isFinite(doseMg);
+                    const hasFrequencyValue = Number.isFinite(frequencyPerDay);
+                    const hasCoreDoseDetails = hasDoseValue && hasFrequencyValue;
+                    const dailyDoseMg = hasCoreDoseDetails ? Math.round(doseMg * frequencyPerDay) : null;
                     const medicineClass = classifyMedicine(medText);
                     const doseCeilingMgPerDay = getDoseCeilingMgPerDay({
                         medicineClass,
@@ -1337,10 +1340,10 @@
                         strictness: strictnessConfig.profile
                     });
 
-                    let score = strictnessConfig.baseScore;
+                    let score = hasCoreDoseDetails ? strictnessConfig.baseScore : 18;
                     const factors = [];
 
-                    if (dailyDoseMg !== null) {
+                    if (hasCoreDoseDetails && dailyDoseMg !== null) {
                         if (dailyDoseMg > (doseCeilingMgPerDay * 1.5)) {
                             score += strictnessConfig.dosePenalty.high + 10;
                             factors.push(`Dose exceeds class ceiling significantly (${dailyDoseMg} mg/day vs ${doseCeilingMgPerDay} mg/day).`);
@@ -1362,39 +1365,43 @@
                             factors.push(`Elevated daily exposure (${dailyDoseMg} mg/day).`);
                         }
                     } else {
-                        score += 8;
-                        factors.push('Incomplete dose/frequency details reduce verification confidence.');
+                        factors.push('Incomplete dose/frequency details reduce verification confidence; score is set to data-limited baseline.');
                         commonRiskFactors.add('Some medicines lack complete dosage details.');
                     }
 
-                    if (hasAge) {
-                        if (age >= 75) {
-                            score += strictnessConfig.agePenalty.geriatric75;
-                            factors.push('Very high age-related sensitivity to adverse effects (75+).');
-                            commonRiskFactors.add('Age 75+ requires strict dose review and frequent monitoring.');
-                        } else if (age >= 65) {
-                            score += strictnessConfig.agePenalty.geriatric65;
-                            factors.push('Age-related sensitivity to adverse effects (65+).');
-                            commonRiskFactors.add('Age 65+ needs closer dose tolerance monitoring.');
-                        } else if (age <= 12) {
-                            score += strictnessConfig.agePenalty.pediatric;
-                            factors.push('Pediatric dosing requires strict weight/age verification.');
-                            commonRiskFactors.add('Pediatric age group increases dosing sensitivity.');
-                        } else if (age <= 17) {
-                            score += strictnessConfig.agePenalty.adolescent;
-                            factors.push('Adolescent dosing should be confirmed for growth-stage safety.');
+                    if (hasCoreDoseDetails) {
+                        if (hasAge) {
+                            if (age >= 75) {
+                                score += strictnessConfig.agePenalty.geriatric75;
+                                factors.push('Very high age-related sensitivity to adverse effects (75+).');
+                                commonRiskFactors.add('Age 75+ requires strict dose review and frequent monitoring.');
+                            } else if (age >= 65) {
+                                score += strictnessConfig.agePenalty.geriatric65;
+                                factors.push('Age-related sensitivity to adverse effects (65+).');
+                                commonRiskFactors.add('Age 65+ needs closer dose tolerance monitoring.');
+                            } else if (age <= 12) {
+                                score += strictnessConfig.agePenalty.pediatric;
+                                factors.push('Pediatric dosing requires strict weight/age verification.');
+                                commonRiskFactors.add('Pediatric age group increases dosing sensitivity.');
+                            } else if (age <= 17) {
+                                score += strictnessConfig.agePenalty.adolescent;
+                                factors.push('Adolescent dosing should be confirmed for growth-stage safety.');
+                            }
+                        } else {
+                            factors.push('Age not provided, so age-adjusted verification is limited.');
+                            commonRiskFactors.add('Age data missing for full dose verification.');
                         }
-                    } else {
+                    } else if (!hasAge) {
                         factors.push('Age not provided, so age-adjusted verification is limited.');
                         commonRiskFactors.add('Age data missing for full dose verification.');
                     }
 
-                    if (normalizedGender === 'female' && dailyDoseMg !== null && dailyDoseMg > 1000) {
+                    if (hasCoreDoseDetails && normalizedGender === 'female' && dailyDoseMg !== null && dailyDoseMg > 1000) {
                         score += 4;
                         factors.push('Additional review advised for higher-dose female-specific tolerability differences.');
                     }
 
-                    if (durationDays !== null) {
+                    if (hasCoreDoseDetails && durationDays !== null) {
                         if (durationDays >= 180) {
                             score += strictnessConfig.durationPenalty.halfYear;
                             factors.push('Long-term planned use (>= 6 months).');
@@ -1412,15 +1419,15 @@
                     }
 
                     const rawLower = String(medText || '').toLowerCase();
-                    if (/\b(steroid|prednisone|dexamethasone)\b/.test(rawLower)) {
+                    if (hasCoreDoseDetails && /\b(steroid|prednisone|dexamethasone)\b/.test(rawLower)) {
                         score += 14;
                         factors.push('Steroid class requires tighter long-term metabolic and bone monitoring.');
                     }
-                    if (/\b(ibuprofen|diclofenac|naproxen|nsaid)\b/.test(rawLower)) {
+                    if (hasCoreDoseDetails && /\b(ibuprofen|diclofenac|naproxen|nsaid)\b/.test(rawLower)) {
                         score += 10;
                         factors.push('NSAID class may increase kidney and gastric risk over time.');
                     }
-                    if (/\b(opioid|tramadol|morphine|codeine)\b/.test(rawLower)) {
+                    if (hasCoreDoseDetails && /\b(opioid|tramadol|morphine|codeine)\b/.test(rawLower)) {
                         score += 18;
                         factors.push('Opioid-class medicines carry dependence and tolerance risk.');
                     }

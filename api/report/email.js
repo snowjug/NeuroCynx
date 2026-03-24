@@ -344,11 +344,17 @@ async function generatePDF(patientName, analysis) {
         doc.moveDown(0.2);
       };
 
+      const truncateInline = (value, maxLength = 44) => {
+        const text = String(value || '');
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}...`;
+      };
+
       const drawCompactDosageItemCard = (x, y, width, height, item) => {
         const itemMeta = getRiskMetaFromScore(item.riskScore);
         doc.roundedRect(x, y, width, height, 8).fill(itemMeta.bg).strokeColor(itemMeta.border).lineWidth(1).stroke();
-        doc.fillColor('#111827').font('Helvetica-Bold').fontSize(9.5).text(item.medicine.substring(0, 56), x + 10, y + 9, { width: width - 20 });
-        doc.fillColor(itemMeta.color).font('Helvetica-Bold').fontSize(9).text(`${itemMeta.label} • ${item.riskScore}/100`, x + 10, y + 24, { width: width - 20 });
+        doc.fillColor('#111827').font('Helvetica-Bold').fontSize(9.5).text(truncateInline(item.medicine, 48), x + 10, y + 9, { width: width - 20, lineBreak: false });
+        doc.fillColor(itemMeta.color).font('Helvetica-Bold').fontSize(9).text(`${itemMeta.label} • ${item.riskScore}/100`, x + 10, y + 23, { width: width - 20, lineBreak: false });
 
         const hasDailyDose = Number.isFinite(item?.parsed?.dailyDoseMg);
         const hasDuration = Number.isFinite(item?.parsed?.durationDays);
@@ -356,9 +362,9 @@ async function generatePDF(patientName, analysis) {
         const doseText = hasDailyDose ? `${item.parsed.dailyDoseMg} mg/day` : 'Daily dose unknown';
         const durationText = hasDuration ? `${item.parsed.durationDays} days` : 'Duration unknown';
         const ceilingText = hasCeiling ? `${item.parsed.doseCeilingMgPerDay} mg/day` : 'Ceiling unknown';
-        doc.fillColor('#4b5563').font('Helvetica').fontSize(8.5).text(`Dose: ${doseText}`, x + 10, y + 39, { width: width - 20 });
-        doc.text(`Ceiling: ${ceilingText}`, x + 10, y + 50, { width: width - 20 });
-        doc.text(`Duration: ${durationText}`, x + 10, y + 61, { width: width - 20 });
+        doc.fillColor('#4b5563').font('Helvetica').fontSize(8.5).text(`Dose: ${doseText}`, x + 10, y + 37, { width: width - 20, lineBreak: false });
+        doc.text(`Ceiling: ${ceilingText}`, x + 10, y + 49, { width: width - 20, lineBreak: false });
+        doc.text(`Duration: ${durationText}`, x + 10, y + 61, { width: width - 20, lineBreak: false });
       };
 
       const drawHighlightCards = (metrics) => {
@@ -640,55 +646,80 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(0.6);
 
       const hasReferenceRows = referenceInsights.dosageRecommendations.length > 0 || referenceInsights.alternates.length > 0;
-      ensureSpace((hasReferenceRows ? 165 : 75) + 30);
+      const leftReferenceLines = referenceInsights.dosageRecommendations.length > 0
+        ? referenceInsights.dosageRecommendations.slice(0, 4).map((item) => `• ${String(item)}`)
+        : ['• Threat: No dosage recommendation can be generated without medicine dosage details.'];
+      const rightReferenceLines = referenceInsights.alternates.length > 0
+        ? referenceInsights.alternates.slice(0, 4).map((item) => `• ${String(item)}`)
+        : ['• Opportunity: No direct therapeutic interchange identified from the current medicine list.'];
+      const referenceColWidth = (contentWidth / 2) - 20;
+
+      doc.font('Helvetica').fontSize(8.8);
+      const leftReferenceHeight = doc.heightOfString(leftReferenceLines.join('\n'), { width: referenceColWidth, lineGap: 1.5 });
+      const rightReferenceHeight = doc.heightOfString(rightReferenceLines.join('\n'), { width: referenceColWidth, lineGap: 1.5 });
+      doc.font('Helvetica-Oblique').fontSize(8.5);
+      const safetyProtocolHeight = doc.heightOfString(`Safety Protocol: ${referenceInsights.safetyProtocol}`, { width: contentWidth - 24, lineGap: 1.5 });
+
+      const referenceContentHeight = Math.max(leftReferenceHeight, rightReferenceHeight);
+      const referenceCardHeight = Math.max(hasReferenceRows ? 170 : 90, 48 + referenceContentHeight + 16 + safetyProtocolHeight + 12);
+
+      ensureSpace(referenceCardHeight + 30);
       drawSectionTitle('Reference-Based Verification');
 
       const referenceCardY = doc.y;
-      const referenceCardHeight = hasReferenceRows ? 152 : 62;
       doc.roundedRect(pageLeft, referenceCardY, contentWidth, referenceCardHeight, 8).fill('#f8fafc').strokeColor('#dbe3ef').lineWidth(1).stroke();
 
-      doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(10).text('Threats: Dosage Recommendations', pageLeft + 12, referenceCardY + 10, { width: (contentWidth / 2) - 18 });
-      const dosageLines = referenceInsights.dosageRecommendations.length > 0
-        ? referenceInsights.dosageRecommendations.slice(0, 3).map((item) => `• ${String(item).slice(0, 95)}`)
-        : ['• Threat: No dosage recommendation can be generated without medicine dosage details.'];
-      doc.fillColor('#334155').font('Helvetica').fontSize(8.6).text(dosageLines.join('\n'), pageLeft + 12, referenceCardY + 25, {
-        width: (contentWidth / 2) - 20,
-        height: referenceCardHeight - 40
+      doc.roundedRect(pageLeft + 10, referenceCardY + 8, 170, 16, 8).fill('#fee2e2').strokeColor('#fecaca').lineWidth(1).stroke();
+      doc.fillColor('#991b1b').font('Helvetica-Bold').fontSize(8.2).text('THREATS • DOSAGE RECOMMENDATIONS', pageLeft + 16, referenceCardY + 12, { width: 160, lineBreak: false });
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.8).text(leftReferenceLines.join('\n'), pageLeft + 12, referenceCardY + 30, {
+        width: referenceColWidth,
+        lineGap: 1.5
       });
 
       const rightColX = pageLeft + (contentWidth / 2) + 3;
-      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(10).text('Alternates: Therapeutic Interchanges', rightColX + 8, referenceCardY + 10, { width: (contentWidth / 2) - 18 });
-      const alternateLines = referenceInsights.alternates.length > 0
-        ? referenceInsights.alternates.slice(0, 3).map((item) => `• ${String(item).slice(0, 95)}`)
-        : ['• Opportunity: No direct therapeutic interchange identified from the current medicine list.'];
-      doc.fillColor('#334155').font('Helvetica').fontSize(8.6).text(alternateLines.join('\n'), rightColX + 8, referenceCardY + 25, {
-        width: (contentWidth / 2) - 20,
-        height: referenceCardHeight - 40
+      doc.roundedRect(rightColX + 6, referenceCardY + 8, 170, 16, 8).fill('#dcfce7').strokeColor('#bbf7d0').lineWidth(1).stroke();
+      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(8.2).text('ALTERNATES • THERAPEUTIC INTERCHANGES', rightColX + 12, referenceCardY + 12, { width: 160, lineBreak: false });
+      doc.fillColor('#334155').font('Helvetica').fontSize(8.8).text(rightReferenceLines.join('\n'), rightColX + 8, referenceCardY + 30, {
+        width: referenceColWidth,
+        lineGap: 1.5
       });
 
-      doc.fillColor('#92400e').font('Helvetica-Oblique').fontSize(8.5).text(`Safety Protocol: ${referenceInsights.safetyProtocol}`, pageLeft + 12, referenceCardY + referenceCardHeight - 16, {
-        width: contentWidth - 24
+      const safetyY = referenceCardY + Math.max(48 + referenceContentHeight, 110) + 10;
+      doc.roundedRect(pageLeft + 10, safetyY - 2, contentWidth - 20, safetyProtocolHeight + 8, 6).fill('#fffbeb').strokeColor('#fde68a').lineWidth(1).stroke();
+      doc.fillColor('#92400e').font('Helvetica-Oblique').fontSize(8.5).text(`Safety Protocol: ${referenceInsights.safetyProtocol}`, pageLeft + 14, safetyY + 2, {
+        width: contentWidth - 28,
+        lineGap: 1.2
       });
       doc.y = referenceCardY + referenceCardHeight + 8;
       drawDivider();
       doc.moveDown(0.6);
 
-      ensureSpace((medicineItems.length > 0 ? 145 : 40) + 30);
+      const medicationLines = medicineItems.length > 0
+        ? medicineItems.slice(0, 5).map((item) => `• ${String(item)}`)
+        : [];
+      doc.font('Helvetica').fontSize(10);
+      const medicationBodyHeight = medicationLines.length > 0
+        ? doc.heightOfString(medicationLines.join('\n'), { width: contentWidth - 24, lineGap: 2 })
+        : 24;
+      const medicationCardHeight = Math.max(150, 52 + medicationBodyHeight + 24);
+
+      ensureSpace((medicineItems.length > 0 ? medicationCardHeight : 40) + 30);
       drawSectionTitle('Medication Guidance');
       
       if (medicineItems.length > 0) {
         const medicineCardY = doc.y;
-        doc.roundedRect(pageLeft, medicineCardY, contentWidth, 135, 8).fill('#fefce8').strokeColor('#ca8a04').lineWidth(1.5).stroke();
-        doc.fillColor('#78350f').font('Helvetica-Bold').fontSize(11).text('Prescribed Medications', pageLeft + 12, medicineCardY + 10, { width: contentWidth - 24 });
-        
-        const medicineLines = medicineItems.slice(0, 3).map((item) => `Rx  ${String(item).substring(0, 75)}`);
-        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(medicineLines.join('\n'), pageLeft + 12, medicineCardY + 30, {
+        doc.roundedRect(pageLeft, medicineCardY, contentWidth, medicationCardHeight, 8).fill('#fefce8').strokeColor('#ca8a04').lineWidth(1.5).stroke();
+        doc.roundedRect(pageLeft + 10, medicineCardY + 8, 150, 16, 8).fill('#fef3c7').strokeColor('#fde68a').lineWidth(1).stroke();
+        doc.fillColor('#78350f').font('Helvetica-Bold').fontSize(8.3).text('PRESCRIBED MEDICATIONS', pageLeft + 16, medicineCardY + 12, { width: 135, lineBreak: false });
+
+        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(medicationLines.join('\n'), pageLeft + 12, medicineCardY + 32, {
           width: contentWidth - 24,
-          height: 85
+          lineGap: 2
         });
-        
-        doc.font('Helvetica-Oblique').fontSize(9).fillColor('#991b1b').text('Always consult a licensed physician before taking medications.', pageLeft + 12, medicineCardY + 120, { width: contentWidth - 24 });
-        doc.y = medicineCardY + 138;
+
+        const medicationFooterY = medicineCardY + medicationCardHeight - 20;
+        doc.fillColor('#991b1b').font('Helvetica-Oblique').fontSize(9).text('Always consult a licensed physician before taking medications.', pageLeft + 12, medicationFooterY, { width: contentWidth - 24 });
+        doc.y = medicineCardY + medicationCardHeight + 3;
       } else {
         doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No medication guidance available.', pageLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.4);
@@ -697,19 +728,28 @@ async function generatePDF(patientName, analysis) {
       doc.moveDown(0.5);
 
       const lifestyleItems = Array.isArray(analysis?.lifestyle) ? analysis.lifestyle : [];
-      ensureSpace((lifestyleItems.length > 0 ? 140 : 40) + 30);
+      const lifestyleLines = lifestyleItems.length > 0
+        ? lifestyleItems.slice(0, 6).map((item) => `• ${String(item)}`)
+        : [];
+      doc.font('Helvetica').fontSize(10);
+      const lifestyleBodyHeight = lifestyleLines.length > 0
+        ? doc.heightOfString(lifestyleLines.join('\n'), { width: contentWidth - 24, lineGap: 2 })
+        : 24;
+      const lifestyleCardHeight = Math.max(145, 52 + lifestyleBodyHeight + 16);
+
+      ensureSpace((lifestyleItems.length > 0 ? lifestyleCardHeight : 40) + 30);
       drawSectionTitle('Lifestyle Recommendations');
       if (lifestyleItems.length > 0) {
         const lifestyleCardY = doc.y;
-        doc.roundedRect(pageLeft, lifestyleCardY, contentWidth, 130, 8).fill('#f0fdf4').strokeColor('#16a34a').lineWidth(1.5).stroke();
-        doc.fillColor('#166534').font('Helvetica-Bold').fontSize(11).text('Wellness & Daily Habits', pageLeft + 12, lifestyleCardY + 10, { width: contentWidth - 24 });
-        
-        const lifestyleLines = lifestyleItems.slice(0, 5).map((item) => `• ${String(item).substring(0, 75)}`);
-        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(lifestyleLines.join('\n'), pageLeft + 12, lifestyleCardY + 30, {
+        doc.roundedRect(pageLeft, lifestyleCardY, contentWidth, lifestyleCardHeight, 8).fill('#f0fdf4').strokeColor('#16a34a').lineWidth(1.5).stroke();
+        doc.roundedRect(pageLeft + 10, lifestyleCardY + 8, 145, 16, 8).fill('#dcfce7').strokeColor('#bbf7d0').lineWidth(1).stroke();
+        doc.fillColor('#166534').font('Helvetica-Bold').fontSize(8.3).text('WELLNESS & DAILY HABITS', pageLeft + 16, lifestyleCardY + 12, { width: 130, lineBreak: false });
+
+        doc.fillColor(textSecondary).font('Helvetica').fontSize(10).text(lifestyleLines.join('\n'), pageLeft + 12, lifestyleCardY + 32, {
           width: contentWidth - 24,
-          height: 90
+          lineGap: 2
         });
-        doc.y = lifestyleCardY + 135;
+        doc.y = lifestyleCardY + lifestyleCardHeight + 3;
       } else {
         doc.font('Helvetica').fontSize(10).fillColor(textSecondary).text('No lifestyle recommendations available.', pageLeft, doc.y, { width: contentWidth });
         doc.moveDown(0.4);
