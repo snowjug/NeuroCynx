@@ -1608,6 +1608,29 @@
                 }
             };
 
+            const downloadPdfWithPayload = async (reportPayload) => {
+                const response = await fetch('/api/report/pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reportPayload)
+                });
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload?.error?.message || 'Unable to generate PDF right now.');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `NeuCyn_Report_${Date.now()}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+            };
+
             const handleDownloadPdf = async () => {
                 if (!analysis) {
                     alert("No analysis data found. Please run analysis first.");
@@ -1617,32 +1640,58 @@
                 setPdfStatus('generating');
                 try {
                     const reportPayload = getReportPayload();
-                    const response = await fetch('/api/report/pdf', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(reportPayload)
-                    });
-
-                    if (!response.ok) {
-                        const payload = await response.json().catch(() => ({}));
-                        throw new Error(payload?.error?.message || 'Unable to generate PDF right now.');
-                    }
-
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `NeuCyn_Report_${Date.now()}.pdf`;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    window.URL.revokeObjectURL(url);
+                    await downloadPdfWithPayload(reportPayload);
 
                     setPdfStatus('done');
                     setTimeout(() => setPdfStatus('idle'), 3000);
                 } catch (error) {
                     setPdfStatus('idle');
                     alert(`Failed to download PDF: ${error.message}`);
+                }
+            };
+
+            const handleDownloadDemoPdf = async () => {
+                const demoAnalysis = getDemoPreviewAnalysis();
+                setPdfStatus('generating');
+
+                try {
+                    const demoDosageVerification = buildDosageVerification(
+                        demoAnalysis?.medicine,
+                        patientAge,
+                        patientWeight,
+                        patientGender,
+                        clinicalStrictness
+                    );
+                    const demoReferenceBasedVerification = buildReferenceBasedVerification(demoDosageVerification, clinicalStrictness);
+                    const mergedDemoReferenceBasedVerification = {
+                        ...demoReferenceBasedVerification,
+                        alternates: mergeReferenceAlternates(demoReferenceBasedVerification.alternates, medicineDbComparisons)
+                    };
+
+                    const demoPayload = {
+                        patientName: patientName.trim() || 'Demo Patient',
+                        patientAge: Number.isFinite(Number(patientAge)) ? Number(patientAge) : null,
+                        patientWeight: Number.isFinite(Number(patientWeight)) ? Number(patientWeight) : null,
+                        patientGender,
+                        clinicalStrictness,
+                        analysis: {
+                            summary: demoAnalysis?.summary,
+                            care: demoAnalysis?.care,
+                            medicine: demoAnalysis?.medicine,
+                            lifestyle: demoAnalysis?.lifestyle,
+                            swot: demoAnalysis?.swot,
+                            graph: getRelevantHealthGraph(demoAnalysis?.graph),
+                            dosageVerification: demoDosageVerification,
+                            referenceBasedVerification: mergedDemoReferenceBasedVerification
+                        }
+                    };
+
+                    await downloadPdfWithPayload(demoPayload);
+                    setPdfStatus('done');
+                    setTimeout(() => setPdfStatus('idle'), 3000);
+                } catch (error) {
+                    setPdfStatus('idle');
+                    alert(`Failed to download demo PDF: ${error.message}`);
                 }
             };
 
@@ -1758,6 +1807,14 @@
                                 <button type="submit" className="btn btn-primary btn-block" disabled={status === 'uploading' || status === 'analyzing'}>
                                     {status === 'uploading' ? "Uploading..." : status === 'analyzing' ? "Analyzing via Neuro-AI..." : "Analyze Report"}
                                 </button>
+                                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px'}}>
+                                    <button type="button" className="btn btn-primary" onClick={handleShowDemoAnalysis}>
+                                        Load Demo Analysis (UI)
+                                    </button>
+                                    <button type="button" className="btn" style={{background: 'var(--bg-card)', color: 'var(--accent)', border: '1px solid var(--border)', fontWeight: 600}} onClick={handleDownloadDemoPdf}>
+                                        Download Demo PDF
+                                    </button>
+                                </div>
                                 {status === 'error' && analysisError && (
                                     <p style={{marginTop: '12px', fontSize: '14px', color: '#dc2626', fontWeight: 600}}>{analysisError}</p>
                                 )}
