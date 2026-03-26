@@ -156,10 +156,49 @@ const normalizeDosageVerification = (rawDosage, medicineItems) => {
 };
 
 const normalizeReferenceBasedVerification = (rawReference) => {
+  const compactDosageMessage = (entry) => {
+    const raw = toPlainText(entry?.message || entry);
+    if (!raw) return '';
+
+    // Normalize legacy verbose text to a compact format.
+    const medicineFromForIs = /for\s+([^.,]+?)\s+is\s+/i.exec(raw);
+    const medicineFromPrefix = /^\w+:\s*([^.,]+?)\s+(?:prescribed|dose|cannot)/i.exec(raw);
+    const medicine = toPlainText(entry?.medicine || medicineFromForIs?.[1] || medicineFromPrefix?.[1] || 'Medication');
+    const doseMatch = /(?:prescription of|prescribed dose is|prescribed)\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
+    const rangeMatch = /(\d+(?:\.\d+)?)\s*mg\s*[-to]+\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
+    const sIdxMatch = /S[_\s]*\{?idx\}?\s*=\s*(\d+(?:\.\d+)?)/i.exec(raw) || /severityIndex\s*[:=]\s*(\d+(?:\.\d+)?)/i.exec(raw);
+    const isThreat = /threat|exceed|cannot be verified/i.test(raw);
+
+    if (/cannot be verified|does not contain a clear mg value|dose not found/i.test(raw)) {
+      if (rangeMatch) {
+        return `Threat: ${medicine} dose not found in mg. Ideal dosage: ${rangeMatch[1]}-${rangeMatch[2]}mg.`;
+      }
+      return `Threat: ${medicine} dose not found in mg.`;
+    }
+
+    if (doseMatch && rangeMatch) {
+      const sIdxText = sIdxMatch ? ` S_idx=${Number(sIdxMatch[1]).toFixed(2)}.` : '';
+      return `${isThreat ? 'Threat' : 'Reference'}: ${medicine} prescribed ${doseMatch[1]}mg. Ideal dosage: ${rangeMatch[1]}-${rangeMatch[2]}mg.${sIdxText}`;
+    }
+
+    return raw.replaceAll(/\$?S_?\{?idx\}?\s*=\s*[^)$\s]+\$?/gi, 'S_idx').trim();
+  };
+
+  const compactAlternateMessage = (entry) => {
+    const genericFromMessageMatch = /generic(?: equivalent)?\s+["“]?([^"”]+)["”]?/i.exec(toPlainText(entry?.message || entry));
+    const generic = toPlainText(
+      entry?.genericName || entry?.generic || (genericFromMessageMatch?.[1] || '')
+    );
+    if (generic) {
+      return `RxNorm Generic Alternative: "${generic}"`;
+    }
+    return toPlainText(entry?.message || entry);
+  };
+
   const dosageRecommendations = Array.isArray(rawReference?.dosageRecommendations)
     ? rawReference.dosageRecommendations
       .slice(0, 6)
-      .map((entry) => toPlainText(entry?.message || entry))
+      .map((entry) => compactDosageMessage(entry))
       .filter(Boolean)
     : [];
 
@@ -167,7 +206,7 @@ const normalizeReferenceBasedVerification = (rawReference) => {
     ? rawReference.alternates
       .slice(0, 6)
       .map((entry) => {
-        const message = toPlainText(entry?.message || entry);
+        const message = compactAlternateMessage(entry);
         const source = toPlainText(entry?.source || '');
         return source ? `${message} (${source})` : message;
       })
@@ -651,7 +690,7 @@ async function generatePDF(patientName, analysis) {
         : ['• Threat: No dosage recommendation can be generated without medicine dosage details.'];
       const rightReferenceLines = referenceInsights.alternates.length > 0
         ? referenceInsights.alternates.slice(0, 4).map((item) => `• ${String(item)}`)
-        : ['• Opportunity: No direct therapeutic interchange identified from the current medicine list.'];
+        : ['• RxNorm Generic Alternative: None identified.'];
       const referenceColWidth = (contentWidth / 2) - 20;
 
       doc.font('Helvetica').fontSize(8.8);
@@ -678,7 +717,7 @@ async function generatePDF(patientName, analysis) {
 
       const rightColX = pageLeft + (contentWidth / 2) + 3;
       doc.roundedRect(rightColX + 6, referenceCardY + 8, 170, 16, 8).fill('#dcfce7').strokeColor('#bbf7d0').lineWidth(1).stroke();
-      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(8.2).text('ALTERNATES • THERAPEUTIC INTERCHANGES', rightColX + 12, referenceCardY + 12, { width: 160, lineBreak: false });
+      doc.fillColor('#065f46').font('Helvetica-Bold').fontSize(8.2).text('ALTERNATES • RXNORM GENERIC OPTIONS', rightColX + 12, referenceCardY + 12, { width: 160, lineBreak: false });
       doc.fillColor('#334155').font('Helvetica').fontSize(8.8).text(rightReferenceLines.join('\n'), rightColX + 8, referenceCardY + 30, {
         width: referenceColWidth,
         lineGap: 1.5

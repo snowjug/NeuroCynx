@@ -1261,7 +1261,8 @@ Rules:
 
                 return {
                     medicine: medicineName,
-                    message: `Opportunity: A generic version of this medication is available at a lower cost. Therapeutic Interchange: Consider ${matched.generic} (same active molecular ingredient: ${matched.activeIngredient}). ${matched.note}`
+                    genericName: matched.generic,
+                    message: `RxNorm Generic Alternative: "${matched.generic}"`
                 };
             };
 
@@ -1282,22 +1283,27 @@ Rules:
                     if (!Number.isFinite(prescribedDose)) {
                         return {
                             medicine: extractMedicineName(item.medicine),
+                            type: 'threat',
+                            prescribedDoseMg: null,
+                            idealMinMg: range.min,
+                            idealMaxMg: range.max,
                             severityIndex: null,
-                            message: `Threat: Dose cannot be verified for ${extractMedicineName(item.medicine)} because the prescription text does not contain a clear mg value.`
+                            message: `Threat: ${extractMedicineName(item.medicine)} dose not found in mg. Ideal dosage: ${range.min}-${range.max}mg.`
                         };
                     }
 
                     const sIdx = range.max > 0 ? prescribedDose / range.max : null;
                     const sIdxRounded = Number.isFinite(sIdx) ? Number(sIdx.toFixed(2)) : null;
-                    const ageLabel = Number.isFinite(age) ? age : 'N/A';
-                    const weightLabel = Number.isFinite(weightKg) ? `${weightKg}kg` : 'N/A';
-
                     const message = sIdxRounded !== null && sIdxRounded > 1
-                        ? `Threat: Based on standard FDA/Clinical guidelines for a patient of your age (${ageLabel}) and weight (${weightLabel}), the typical dosage range is ${range.min}mg-${range.max}mg. Your prescription of ${prescribedDose}mg exceeds this range ($S_{idx} = ${sIdxRounded}$).`
-                        : `Reference: Based on standard FDA/Clinical guidelines for age (${ageLabel}) and weight (${weightLabel}), the typical dosage range for ${extractMedicineName(item.medicine)} is ${range.min}mg-${range.max}mg. Your prescribed dose is ${prescribedDose}mg${sIdxRounded !== null ? ` ($S_{idx} = ${sIdxRounded}$)` : ''}.`;
+                        ? `Threat: ${extractMedicineName(item.medicine)} prescribed ${prescribedDose}mg. Ideal dosage: ${range.min}-${range.max}mg. S_idx=${sIdxRounded}.`
+                        : `Reference: ${extractMedicineName(item.medicine)} prescribed ${prescribedDose}mg. Ideal dosage: ${range.min}-${range.max}mg${sIdxRounded !== null ? `. S_idx=${sIdxRounded}.` : '.'}`;
 
                     return {
                         medicine: extractMedicineName(item.medicine),
+                        type: sIdxRounded !== null && sIdxRounded > 1 ? 'threat' : 'reference',
+                        prescribedDoseMg: prescribedDose,
+                        idealMinMg: range.min,
+                        idealMaxMg: range.max,
                         severityIndex: sIdxRounded,
                         message
                     };
@@ -1325,6 +1331,7 @@ Rules:
                     seen.add(key);
                     merged.push({
                         medicine: entry.medicine,
+                        genericName: entry.genericName || null,
                         message: entry.message,
                         source: 'Heuristic'
                     });
@@ -1337,7 +1344,8 @@ Rules:
                     seen.add(key);
                     merged.push({
                         medicine: entry.medicine,
-                        message: `Opportunity: Open-source medicine database (RxNorm) indicates a generic equivalent \"${entry.genericName}\" is available for ${entry.medicine}. Therapeutic Interchange can reduce cost if clinically appropriate.`,
+                        genericName: entry.genericName,
+                        message: `RxNorm Generic Alternative: "${entry.genericName}"`,
                         source: 'RxNorm'
                     });
                 });
@@ -1643,6 +1651,35 @@ Rules:
                 ...referenceBasedVerification,
                 alternates: mergeReferenceAlternates(referenceBasedVerification.alternates, medicineDbComparisons)
             };
+            const referenceDosageCards = (mergedReferenceBasedVerification.dosageRecommendations || []).map((entry, idx) => {
+                const rawMessage = String(entry?.message || '');
+                const type = String(entry?.type || '').toLowerCase() === 'threat' || /threat/i.test(rawMessage) ? 'threat' : 'reference';
+                const medicine = entry?.medicine || 'Medication';
+                const prescribedDoseMg = Number.isFinite(entry?.prescribedDoseMg) ? entry.prescribedDoseMg : null;
+                const idealMinMg = Number.isFinite(entry?.idealMinMg) ? entry.idealMinMg : null;
+                const idealMaxMg = Number.isFinite(entry?.idealMaxMg) ? entry.idealMaxMg : null;
+                const severityIndex = Number.isFinite(entry?.severityIndex) ? entry.severityIndex : null;
+                return {
+                    id: `${medicine}-${idx}`,
+                    type,
+                    medicine,
+                    prescribedDoseMg,
+                    idealMinMg,
+                    idealMaxMg,
+                    severityIndex,
+                    fallbackText: rawMessage
+                };
+            });
+            const referenceAlternateCards = (mergedReferenceBasedVerification.alternates || []).map((entry, idx) => {
+                const rawMessage = String(entry?.message || '');
+                const parsedGeneric = rawMessage.match(/RxNorm Generic Alternative:\s*"([^"]+)"/i)?.[1] || '';
+                return {
+                    id: `${entry?.medicine || 'Medication'}-${idx}`,
+                    medicine: entry?.medicine || 'Medication',
+                    genericName: entry?.genericName || parsedGeneric || 'N/A',
+                    source: entry?.source || 'RxNorm'
+                };
+            });
             const dosageThresholds = getStrictnessConfig(clinicalStrictness).thresholds;
             const dosageRiskMeta = getRiskLabelMeta(dosageVerification.overallRiskScore, dosageThresholds);
 
@@ -2077,19 +2114,49 @@ Rules:
                                             <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '10px', marginBottom: '12px'}}>
                                                 <div style={{background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '12px', padding: '12px'}}>
                                                     <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#991b1b'}}>Threats: Dosage Recommendations</h4>
-                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
-                                                        {mergedReferenceBasedVerification.dosageRecommendations.length > 0
-                                                            ? mergedReferenceBasedVerification.dosageRecommendations.map((entry, idx) => <li key={idx}>{entry.message}</li>)
-                                                            : <li>Threat: No dosage recommendation can be generated without medicine dosage details.</li>}
-                                                    </ul>
+                                                    {referenceDosageCards.length > 0 ? (
+                                                        <div style={{display: 'grid', gap: '8px'}}>
+                                                            {referenceDosageCards.map((entry) => {
+                                                                const isThreat = entry.type === 'threat';
+                                                                const badgeStyle = isThreat
+                                                                    ? { bg: '#fee2e2', color: '#991b1b', border: '#fca5a5', label: 'Threat' }
+                                                                    : { bg: '#ecfdf5', color: '#065f46', border: '#86efac', label: 'Reference' };
+                                                                return (
+                                                                    <div key={entry.id} style={{border: `1px solid ${badgeStyle.border}`, borderRadius: '10px', background: '#ffffff', padding: '10px'}}>
+                                                                        <div style={{display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center'}}>
+                                                                            <div style={{fontWeight: 700, color: '#111827', fontSize: '13px'}}>{entry.medicine}</div>
+                                                                            <span style={{background: badgeStyle.bg, color: badgeStyle.color, border: `1px solid ${badgeStyle.border}`, borderRadius: '999px', padding: '2px 8px', fontSize: '11px', fontWeight: 700}}>{badgeStyle.label}</span>
+                                                                        </div>
+                                                                        {entry.idealMinMg !== null && entry.idealMaxMg !== null ? (
+                                                                            <div style={{marginTop: '6px', fontSize: '12px', color: '#374151'}}>Ideal dosage: <strong>{entry.idealMinMg}-{entry.idealMaxMg} mg</strong></div>
+                                                                        ) : null}
+                                                                        <div style={{marginTop: '4px', fontSize: '12px', color: '#374151'}}>Prescribed: <strong>{entry.prescribedDoseMg !== null ? `${entry.prescribedDoseMg} mg` : 'Dose not found in mg'}</strong></div>
+                                                                        <div style={{marginTop: '4px', fontSize: '12px', color: '#374151'}}>S_idx: <strong>{entry.severityIndex !== null ? entry.severityIndex.toFixed(2) : 'N/A'}</strong></div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <p style={{margin: 0, color: 'var(--text-secondary)', fontSize: '13px'}}>No dosage recommendation available.</p>
+                                                    )}
                                                 </div>
                                                 <div style={{background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '12px', padding: '12px'}}>
-                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#065f46'}}>Alternates: Therapeutic Interchanges</h4>
-                                                    <ul style={{margin: 0, paddingLeft: '18px', color: 'var(--text-secondary)', fontSize: '13px'}}>
-                                                        {mergedReferenceBasedVerification.alternates.length > 0
-                                                            ? mergedReferenceBasedVerification.alternates.map((entry, idx) => <li key={idx}>{entry.message}{entry.source ? ` (${entry.source})` : ''}</li>)
-                                                            : <li>Opportunity: No direct therapeutic interchange identified from the current medicine list.</li>}
-                                                    </ul>
+                                                    <h4 style={{fontSize: '13px', margin: '0 0 8px 0', color: '#065f46'}}>Alternates: RxNorm Generic Alternatives</h4>
+                                                    {referenceAlternateCards.length > 0 ? (
+                                                        <div style={{display: 'grid', gap: '8px'}}>
+                                                            {referenceAlternateCards.map((entry) => (
+                                                                <div key={entry.id} style={{border: '1px solid #86efac', borderRadius: '10px', background: '#ffffff', padding: '10px'}}>
+                                                                    <div style={{fontWeight: 700, color: '#065f46', fontSize: '12px'}}>RxNorm Generic Alternative</div>
+                                                                    <div style={{marginTop: '4px', fontSize: '13px', color: '#111827'}}>
+                                                                        <strong>{entry.medicine}</strong> {'->'} <strong>{entry.genericName}</strong>
+                                                                    </div>
+                                                                    <div style={{marginTop: '4px', fontSize: '11px', color: '#4b5563'}}>Source: {entry.source}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p style={{margin: 0, color: 'var(--text-secondary)', fontSize: '13px'}}>RxNorm Generic Alternative: None identified.</p>
+                                                    )}
                                                 </div>
                                             </div>
                                             <p style={{margin: 0, fontSize: '12px', color: '#92400e', fontWeight: 700}}>
